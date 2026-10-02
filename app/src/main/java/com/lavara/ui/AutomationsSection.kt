@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import com.lavara.automation.Automation
 import com.lavara.core.AppContainer
 import com.lavara.core.TimeText
+import com.lavara.triggers.NextAlarm
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.TriggerEvent
 import kotlinx.coroutines.launch
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZonedDateTime
@@ -53,6 +57,8 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var note by remember { mutableStateOf<String?>(null) }
+    // Hora elegida que todavía falta confirmar: automatización y hora nueva "HH:mm".
+    var pendingTime by remember { mutableStateOf<Pair<Automation, Trigger.Time>?>(null) }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         container.logger.info("Permisos", "Permiso de notificaciones: ${if (granted) "concedido" else "negado"}")
@@ -103,12 +109,13 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
                     save(automation.copy(enabled = enabled), if (enabled) "activada" else "desactivada")
                 },
                 onChangeTime = { trigger ->
-                    val current = TimeText.parseOrNull(trigger.time)!!
+                    // Arranca en la hora actual + 2 minutos (no en la guardada): así a. m./p. m. ya viene bien
+                    // y para una prueba alcanza con tocar Aceptar.
+                    val start = container.clock.now().plusMinutes(2)
                     TimePickerDialog(context, { _, hour, minute ->
-                        val time = "%02d:%02d".format(hour, minute)
-                        save(automation.copy(trigger = trigger.copy(time = time)), "hora cambiada a $time")
+                        pendingTime = automation to trigger.copy(time = "%02d:%02d".format(hour, minute))
                     // Mismo formato que el reloj del teléfono: con a. m./p. m. si el teléfono usa 12 horas.
-                    }, current.hour, current.minute, DateFormat.is24HourFormat(context)).show()
+                    }, start.hour, start.minute, DateFormat.is24HourFormat(context)).show()
                 },
                 onRunNow = {
                     scope.launch {
@@ -118,6 +125,27 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
                         note = result?.let { "${automation.name}: ${it.reason}" } ?: "${automation.name}: no se ejecutó."
                     }
                 },
+            )
+        }
+        pendingTime?.let { (automation, trigger) ->
+            val now = container.clock.now()
+            val at = NextAlarm.after(trigger, now)
+            AlertDialog(
+                onDismissRequest = { pendingTime = null },
+                title = { Text("¿Guardar esta hora?") },
+                text = {
+                    Text(
+                        "${automation.name} va a sonar ${whenText(context, at, now)}, dentro de ${untilText(now, at)}.",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        pendingTime = null
+                        save(automation.copy(trigger = trigger), "hora cambiada a ${trigger.time}")
+                    }) { Text("Guardar") }
+                },
+                dismissButton = { TextButton(onClick = { pendingTime = null }) { Text("Cancelar") } },
             )
         }
         note?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
@@ -205,6 +233,19 @@ private fun whenText(context: Context, at: ZonedDateTime, now: ZonedDateTime): S
         else -> at.format(DateTimeFormatter.ofPattern("dd/MM"))
     }
     return "$day a las ${timeText(context, at.toLocalTime())}"
+}
+
+/** "3 minutos", "2 horas y 5 minutos". */
+private fun untilText(now: ZonedDateTime, at: ZonedDateTime): String {
+    val minutes = Duration.between(now, at).toMinutes().coerceAtLeast(1)
+    val h = minutes / 60
+    val m = minutes % 60
+    val mText = if (m == 1L) "1 minuto" else "$m minutos"
+    return when {
+        h == 0L -> mText
+        m == 0L -> if (h == 1L) "1 hora" else "$h horas"
+        else -> (if (h == 1L) "1 hora" else "$h horas") + " y " + mText
+    }
 }
 
 private fun dayName(iso: Int) = listOf("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")[iso - 1]
