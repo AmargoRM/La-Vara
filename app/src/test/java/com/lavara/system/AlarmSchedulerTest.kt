@@ -60,7 +60,7 @@ class AlarmSchedulerTest {
         scheduler.reschedule("test")
 
         val expected = ZonedDateTime.of(2026, 10, 5, 8, 0, 0, 0, zone).toInstant().toEpochMilli()
-        assertEquals(expected, alarms.nextScheduledAlarm.triggerAtTime)
+        assertEquals(expected, alarms.nextScheduledAlarm!!.triggerAtTime)
         assertEquals(expected, scheduler.next.value)
         assertTrue(logged.last().second, logged.last().second.contains("05/10 08:00"))
     }
