@@ -2,18 +2,22 @@ package com.lavara.ui
 
 import android.Manifest
 import android.app.TimePickerDialog
-import android.content.Context
-import android.text.format.DateFormat
 import android.os.Build
+import android.text.format.DateFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
@@ -32,33 +36,36 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lavara.automation.Automation
+import com.lavara.automation.AutomationDraft
+import com.lavara.automation.ExecutionStatus
 import com.lavara.core.AppContainer
-import com.lavara.core.TimeText
 import com.lavara.triggers.NextAlarm
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.TriggerEvent
 import kotlinx.coroutines.launch
-import java.time.Duration
 import java.time.Instant
-import java.time.LocalTime
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Calendar
 import java.util.UUID
 
 /**
- * Lista mínima de automatizaciones (el editor completo llega en S4): activar/desactivar,
- * cambiar la hora y probar ahora. Arriba, lo que falta para que las alarmas funcionen.
+ * Inicio: resumen del motor, lo que falta para que las alarmas funcionen y la lista de automatizaciones
+ * (activar, probar, editar, duplicar, eliminar). El editor se abre con [onEdit] (id null = nueva).
  */
 @Composable
-fun AutomationsSection(container: AppContainer, resumeCount: Int) {
+fun AutomationsSection(
+    container: AppContainer,
+    resumeCount: Int,
+    onEdit: (String?) -> Unit,
+    onShowHistory: () -> Unit,
+) {
     val automations by remember { container.automationRepository.observeAll() }.collectAsState(initial = emptyList())
+    val runs by remember { container.runRepository.observeLatest(100) }.collectAsState(initial = emptyList())
     val nextAlarm by container.alarmScheduler.next.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var note by remember { mutableStateOf<String?>(null) }
     // Hora elegida que todavía falta confirmar: automatización y hora nueva "HH:mm".
     var pendingTime by remember { mutableStateOf<Pair<Automation, Trigger.Time>?>(null) }
+    var pendingDelete by remember { mutableStateOf<Automation?>(null) }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         container.logger.info("Permisos", "Permiso de notificaciones: ${if (granted) "concedido" else "negado"}")
@@ -81,6 +88,52 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
                 battery = container.batteryOptimization.isExcluded(),
             )
         }
+
+        val now = container.clock.now()
+        val nowMillis = now.toInstant().toEpochMilli()
+        val lastRun = runs.firstOrNull { it.status == ExecutionStatus.EXECUTED.name || it.status == ExecutionStatus.FAILED.name }
+        val recentErrors = runs.count { it.status == ExecutionStatus.FAILED.name && nowMillis - it.startedAt < 24 * 3_600_000L }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    if (health.allOk) "El motor está listo" else "El motor funciona, pero faltan permisos (abajo)",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text("${automations.size} automatizaciones · ${automations.count { it.enabled }} activas", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Última ejecución: " + (lastRun?.let {
+                        val mark = if (it.status == ExecutionStatus.EXECUTED.name) "✓" else "✗"
+                        "${whenText(context, Instant.ofEpochMilli(it.startedAt).atZone(now.zone), now)} · ${it.automationName} $mark"
+                    } ?: "todavía ninguna"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    nextAlarm?.let { "Próxima alarma: ${whenText(context, Instant.ofEpochMilli(it).atZone(now.zone), now)}" }
+                        ?: "No hay alarmas programadas.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+
+        if (recentErrors > 0) {
+            Card(
+                Modifier.fillMaxWidth().clickable(onClick = onShowHistory),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+            ) {
+                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (recentErrors == 1) "1 error en las últimas 24 horas" else "$recentErrors errores en las últimas 24 horas",
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("Ver", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
         if (automations.any { it.enabled } && !health.allOk) {
             HealthCard(
                 health = health,
@@ -92,16 +145,13 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
             )
         }
 
-        Text("Automatizaciones", style = MaterialTheme.typography.titleMedium)
-        Text(
-            nextAlarm?.let { "Próxima alarma: ${whenText(context, Instant.ofEpochMilli(it).atZone(container.clock.now().zone), container.clock.now())}" }
-                ?: "No hay alarmas programadas.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
+        Text("Mis automatizaciones", style = MaterialTheme.typography.titleMedium)
+        if (automations.isEmpty()) Text("Todavía no hay ninguna. Tocá \"Nueva\" para crear la primera.", style = MaterialTheme.typography.bodyMedium)
 
         automations.forEach { automation ->
             AutomationCard(
                 automation = automation,
+                onOpen = { onEdit(automation.id) },
                 onToggle = { enabled ->
                     if (enabled && !container.actionExecutor.canNotify() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -125,30 +175,66 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
                         note = result?.let { "${automation.name}: ${it.reason}" } ?: "${automation.name}: no se ejecutó."
                     }
                 },
-            )
-        }
-        pendingTime?.let { (automation, trigger) ->
-            val now = container.clock.now()
-            val at = NextAlarm.after(trigger, now)
-            AlertDialog(
-                onDismissRequest = { pendingTime = null },
-                title = { Text("¿Guardar esta hora?") },
-                text = {
-                    Text(
-                        "${automation.name} va a sonar ${whenText(context, at, now)}, dentro de ${untilText(now, at)}.",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                onDuplicate = {
+                    scope.launch {
+                        val copy = AutomationDraft.duplicate(automation, "a-" + UUID.randomUUID().toString().take(8), container.clock.now().toInstant().toEpochMilli())
+                        container.automationRepository.save(copy)
+                        container.logger.info("Automatizaciones", "${automation.name}: duplicada como \"${copy.name}\" (desactivada)", copy.id)
+                        note = "Se creó \"${copy.name}\", desactivada."
+                    }
                 },
-                confirmButton = {
-                    TextButton(onClick = {
-                        pendingTime = null
-                        save(automation.copy(trigger = trigger), "hora cambiada a ${trigger.time}")
-                    }) { Text("Guardar") }
-                },
-                dismissButton = { TextButton(onClick = { pendingTime = null }) { Text("Cancelar") } },
+                onDelete = { pendingDelete = automation },
             )
         }
         note?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+    }
+
+    pendingTime?.let { (automation, trigger) ->
+        val now = container.clock.now()
+        val at = NextAlarm.after(trigger, now)
+        AlertDialog(
+            onDismissRequest = { pendingTime = null },
+            title = { Text("¿Guardar esta hora?") },
+            text = {
+                Text(
+                    "${automation.name} va a sonar ${whenText(context, at, now)}, dentro de ${untilText(now, at)}.",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingTime = null
+                    save(automation.copy(trigger = trigger), "hora cambiada a ${trigger.time}")
+                }) { Text("Guardar") }
+            },
+            dismissButton = { TextButton(onClick = { pendingTime = null }) { Text("Cancelar") } },
+        )
+    }
+
+    pendingDelete?.let { automation ->
+        val users = AutomationDraft.usersOf(automation.id, automations)
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text("¿Eliminar \"${automation.name}\"?") },
+            text = {
+                Text(
+                    "Se borra para siempre; no se puede deshacer. Su historial de ejecuciones se conserva." +
+                        if (users.isEmpty()) "" else "\n\nOjo: la usa ${users.joinToString(", ")}. Esa acción va a fallar.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    scope.launch {
+                        container.automationRepository.delete(automation.id)
+                        container.logger.info("Automatizaciones", "${automation.name}: eliminada", automation.id)
+                        container.alarmScheduler.reschedule("${automation.name}: eliminada")
+                        note = "Se eliminó \"${automation.name}\"."
+                    }
+                }) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancelar") } },
+        )
     }
 }
 
@@ -183,69 +269,37 @@ private fun HealthCard(health: Health, onNotifications: () -> Unit, onExactAlarm
 @Composable
 private fun AutomationCard(
     automation: Automation,
+    onOpen: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onChangeTime: (Trigger.Time) -> Unit,
     onRunNow: () -> Unit,
+    onDuplicate: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     val context = LocalContext.current
-    Card(Modifier.fillMaxWidth()) {
+    var menu by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(automation.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(describe(context, automation.trigger), style = MaterialTheme.typography.bodyMedium)
+                    Text(summary(context, automation), style = MaterialTheme.typography.bodyMedium)
                 }
                 Switch(checked = automation.enabled, onCheckedChange = onToggle)
             }
-            if (automation.description.isNotBlank()) {
-                Text(automation.description, style = MaterialTheme.typography.bodySmall)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 val trigger = automation.trigger
                 if (trigger is Trigger.Time) OutlinedButton(onClick = { onChangeTime(trigger) }) { Text("Cambiar hora") }
                 OutlinedButton(onClick = onRunNow) { Text("Probar ahora") }
+                Box {
+                    TextButton(onClick = { menu = true }) { Text("Más") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Editar") }, onClick = { menu = false; onOpen() })
+                        DropdownMenuItem(text = { Text("Duplicar") }, onClick = { menu = false; onDuplicate() })
+                        DropdownMenuItem(text = { Text("Eliminar") }, onClick = { menu = false; onDelete() })
+                    }
+                }
             }
         }
     }
 }
-
-private fun describe(context: Context, trigger: Trigger): String = when (trigger) {
-    is Trigger.Time -> "Cada " + (if (trigger.days.isEmpty()) "día" else trigger.days.joinToString(", ") { dayName(it.isoNumber) }) +
-        " a las ${timeText(context, TimeText.parseOrNull(trigger.time)!!)}"
-    is Trigger.Battery -> "Cuando la batería ${if (trigger.direction.name == "BELOW") "baja a" else "sube a"} ${trigger.threshold} %"
-    Trigger.Manual -> "Solo a mano"
-}
-
-/** Hora como la muestra el reloj del teléfono: "4:30 p. m." o "16:30". */
-private fun timeText(context: Context, time: LocalTime): String {
-    val calendar = Calendar.getInstance().apply {
-        set(Calendar.HOUR_OF_DAY, time.hour)
-        set(Calendar.MINUTE, time.minute)
-    }
-    return DateFormat.getTimeFormat(context).format(calendar.time)
-}
-
-/** "hoy a las 4:30 p. m.", "mañana a las 3:48 a. m." o "05/10 a las 8:00 a. m.". */
-private fun whenText(context: Context, at: ZonedDateTime, now: ZonedDateTime): String {
-    val day = when (at.toLocalDate()) {
-        now.toLocalDate() -> "hoy"
-        now.toLocalDate().plusDays(1) -> "mañana"
-        else -> at.format(DateTimeFormatter.ofPattern("dd/MM"))
-    }
-    return "$day a las ${timeText(context, at.toLocalTime())}"
-}
-
-/** "3 minutos", "2 horas y 5 minutos". */
-private fun untilText(now: ZonedDateTime, at: ZonedDateTime): String {
-    val minutes = Duration.between(now, at).toMinutes().coerceAtLeast(1)
-    val h = minutes / 60
-    val m = minutes % 60
-    val mText = if (m == 1L) "1 minuto" else "$m minutos"
-    return when {
-        h == 0L -> mText
-        m == 0L -> if (h == 1L) "1 hora" else "$h horas"
-        else -> (if (h == 1L) "1 hora" else "$h horas") + " y " + mText
-    }
-}
-
-private fun dayName(iso: Int) = listOf("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")[iso - 1]

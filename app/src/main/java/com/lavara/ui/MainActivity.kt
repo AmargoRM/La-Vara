@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -38,6 +39,7 @@ import com.lavara.LaVaraApp
 import com.lavara.R
 import com.lavara.core.AppContainer
 import com.lavara.core.AppInfo
+import com.lavara.ui.editor.EditorScreen
 import com.lavara.ui.history.HistoryScreen
 import com.lavara.ui.theme.LaVaraTheme
 
@@ -84,10 +86,22 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: Int, resumeCount: Int) {
     var tab by rememberSaveable { mutableStateOf(Tab.INICIO) }
+    // Editor abierto: null = cerrado; NEW = automatización nueva; si no, el id de la que se edita.
+    var editing by rememberSaveable { mutableStateOf<String?>(null) }
     // Si la app se abrió desde la notificación de versión nueva, mostrar la tarjeta de actualizaciones.
     LaunchedEffect(installRequest) { if (installRequest > 0) tab = Tab.INICIO }
 
+    editing?.let { id ->
+        EditorScreen(container, automationId = id.takeUnless { it == NEW }, onClose = { editing = null })
+        return
+    }
+
     Scaffold(
+        floatingActionButton = {
+            if (tab == Tab.INICIO) {
+                ExtendedFloatingActionButton(onClick = { editing = NEW }) { Text("+  Nueva") }
+            }
+        },
         bottomBar = {
             NavigationBar {
                 Tab.entries.forEach { item ->
@@ -103,12 +117,14 @@ fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: In
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                Tab.INICIO -> StartTab(versionLabel, container, installRequest, resumeCount)
+                Tab.INICIO -> StartTab(versionLabel, container, installRequest, resumeCount, onEdit = { editing = it ?: NEW }, onShowHistory = { tab = Tab.HISTORIAL })
                 Tab.HISTORIAL -> HistoryScreen(container)
             }
         }
     }
 }
+
+private const val NEW = "__nueva__"
 
 private enum class Tab(val label: String, @DrawableRes val icon: Int) {
     INICIO("Inicio", R.drawable.ic_inicio),
@@ -116,7 +132,14 @@ private enum class Tab(val label: String, @DrawableRes val icon: Int) {
 }
 
 @Composable
-private fun StartTab(versionLabel: String, container: AppContainer, installRequest: Int, resumeCount: Int) {
+private fun StartTab(
+    versionLabel: String,
+    container: AppContainer,
+    installRequest: Int,
+    resumeCount: Int,
+    onEdit: (String?) -> Unit,
+    onShowHistory: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -139,8 +162,10 @@ private fun StartTab(versionLabel: String, container: AppContainer, installReque
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(32.dp))
-        AutomationsSection(container = container, resumeCount = resumeCount)
+        AutomationsSection(container = container, resumeCount = resumeCount, onEdit = onEdit, onShowHistory = onShowHistory)
         Spacer(Modifier.height(24.dp))
         UpdateSection(container = container, installRequest = installRequest)
+        // Espacio para que el botón "Nueva" no tape lo último de la lista.
+        Spacer(Modifier.height(80.dp))
     }
 }
