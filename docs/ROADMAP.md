@@ -67,7 +67,7 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 
 ### S5 — Cierre del MVP
 - [x] Trigger de batería (umbral, cargador conectado/desconectado) por broadcasts.
-- [ ] Acción `OpenApp` con selector de apps instaladas (nombre, paquete, ícono) y la solución para abrir apps desde segundo plano descrita en `LIMITES_ANDROID.md`.
+- [x] Acción `OpenApp` con selector de apps instaladas (nombre, paquete, ícono) y la solución para abrir apps desde segundo plano descrita en `LIMITES_ANDROID.md`.
 - [ ] Acción `Delay` sin bloquear (corta: dentro de la ejecución; larga: alarma).
 - [ ] Pantalla **Permisos** con semáforo: verde concedido, amarillo opcional, rojo necesario para una automatización existente; cada fila abre su ajuste.
 - [ ] Importar y exportar automatizaciones como archivo JSON (selector de archivos del sistema) y desde el portapapeles.
