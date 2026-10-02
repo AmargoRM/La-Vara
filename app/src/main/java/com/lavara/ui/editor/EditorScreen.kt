@@ -5,6 +5,18 @@ import android.content.Context
 import android.text.format.DateFormat
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import com.lavara.system.device.InstalledApps
+import com.lavara.system.device.InstalledApp
+import androidx.core.graphics.drawable.toBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.runtime.produceState
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -404,7 +416,8 @@ private fun AddMenu(label: String, options: List<Pair<String, () -> Unit>>) {
 
 @Composable
 private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (AutomationDraft) -> Unit) {
-    var askPackage by remember { mutableStateOf(false) }
+    // Para qué acción se está eligiendo app: su posición, o NEW_ACTION para agregar una nueva.
+    var pickFor by remember { mutableStateOf<Int?>(null) }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("¿Qué hace?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
@@ -449,17 +462,27 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                             )
                         }
                         is Action.OpenApp -> {
-                            var text by remember(index, action) { mutableStateOf(action.packageName) }
+                            val context = LocalContext.current
+                            val label = remember(action.packageName) { InstalledApps(context).label(action.packageName) }
+                            OutlinedButton(onClick = { pickFor = index }, modifier = Modifier.fillMaxWidth()) {
+                                AppIcon(action.packageName)
+                                Text(label ?: "No está instalada (${action.packageName}). Tocá para elegir otra.", modifier = Modifier.padding(start = 10.dp).weight(1f))
+                            }
+                        }
+                        is Action.OpenUrl -> {
+                            var text by remember(index, action) { mutableStateOf(action.url) }
+                            val valid = text.startsWith("http://") || text.startsWith("https://")
                             OutlinedTextField(
                                 value = text,
                                 onValueChange = { new ->
                                     text = new.trim()
-                                    if (text.isNotBlank()) replace(Action.OpenApp(text))
+                                    if (text.startsWith("http://") || text.startsWith("https://")) replace(Action.OpenUrl(text))
                                 },
-                                label = { Text("Nombre de paquete") },
+                                label = { Text("Enlace") },
                                 singleLine = true,
-                                isError = text.isBlank(),
-                                supportingText = { Text("Ejemplo: com.whatsapp. El selector de apps llega en una próxima versión.") },
+                                isError = !valid,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                supportingText = { Text(if (valid) "Se abre en el navegador o en la app que corresponda." else "Tiene que empezar con https://") },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
@@ -489,7 +512,8 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
         options = listOf(
             "Mostrar notificación" to { onChange(draft.copy(actions = draft.actions + Action.ShowNotification("La Vara", ""))) },
             "Esperar unos segundos" to { onChange(draft.copy(actions = draft.actions + Action.Delay(5))) },
-            "Abrir app" to { askPackage = true },
+            "Abrir app" to { pickFor = NEW_ACTION },
+            "Abrir enlace" to { onChange(draft.copy(actions = draft.actions + Action.OpenUrl("https://"))) },
             "Ejecutar otra automatización" to { onChange(draft.copy(actions = draft.actions + Action.RunAutomation(""))) },
         ),
     )
@@ -506,26 +530,70 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
 
     CooldownRow(draft.cooldownSeconds) { onChange(draft.copy(cooldownSeconds = it)) }
 
-    if (askPackage) {
-        var text by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { askPackage = false },
-            title = { Text("¿Qué app abrir?") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Escribí el nombre de paquete de la app, por ejemplo com.whatsapp. El selector de apps llega en una próxima versión.")
-                    OutlinedTextField(text, { text = it.trim() }, singleLine = true, label = { Text("Nombre de paquete") })
-                }
+    pickFor?.let { target ->
+        AppPickerDialog(
+            onDismiss = { pickFor = null },
+            onPick = { app ->
+                pickFor = null
+                val action = Action.OpenApp(app.packageName)
+                onChange(
+                    if (target == NEW_ACTION) draft.copy(actions = draft.actions + action)
+                    else draft.copy(actions = draft.actions.toMutableList().also { it[target] = action }),
+                )
             },
-            confirmButton = {
-                TextButton(enabled = text.isNotBlank(), onClick = {
-                    askPackage = false
-                    onChange(draft.copy(actions = draft.actions + Action.OpenApp(text)))
-                }) { Text("Agregar") }
-            },
-            dismissButton = { TextButton(onClick = { askPackage = false }) { Text("Cancelar") } },
         )
     }
+}
+
+private const val NEW_ACTION = -1
+
+@Composable
+private fun AppIcon(packageName: String, size: Int = 32) {
+    val context = LocalContext.current
+    val icon = remember(packageName) {
+        InstalledApps(context).icon(packageName)?.toBitmap(size * 3, size * 3)?.asImageBitmap()
+    }
+    if (icon != null) Image(icon, contentDescription = null, modifier = Modifier.size(size.dp))
+    else Box(Modifier.size(size.dp))
+}
+
+/** Lista de apps instaladas con buscador: el usuario elige por nombre, sin saber el nombre de paquete. */
+@Composable
+private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
+    val context = LocalContext.current
+    val apps by produceState<List<InstalledApp>?>(null) {
+        value = withContext(Dispatchers.IO) { InstalledApps(context).launchable() }
+    }
+    var search by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("¿Qué app abrir?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(search, { search = it }, singleLine = true, label = { Text("Buscar") }, modifier = Modifier.fillMaxWidth())
+                val list = apps
+                if (list == null) {
+                    Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                } else {
+                    val shown = list.filter { it.label.contains(search.trim(), ignoreCase = true) }
+                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 400.dp)) {
+                        items(shown, key = { it.packageName }) { app ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { onPick(app) }.padding(vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AppIcon(app.packageName, size = 36)
+                                Text(app.label, modifier = Modifier.padding(start = 12.dp))
+                            }
+                        }
+                    }
+                    if (shown.isEmpty()) Text("No hay apps con ese nombre.")
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+    )
 }
 
 private val COOLDOWNS = listOf(0L to "sin espera", 60L to "1 minuto", 300L to "5 minutos", 900L to "15 minutos", 3_600L to "1 hora", 86_400L to "1 día")

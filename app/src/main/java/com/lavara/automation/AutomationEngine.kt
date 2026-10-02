@@ -215,6 +215,7 @@ class AutomationEngine(
         fun describe(action: Action): String = when (action) {
             is Action.ShowNotification -> "Mostrar notificación \"${action.title}\""
             is Action.OpenApp -> "Abrir app ${action.packageName}"
+            is Action.OpenUrl -> "Abrir enlace ${action.host}"
             is Action.Delay -> "Esperar ${action.seconds} s"
             is Action.RunAutomation -> "Ejecutar automatización ${action.automationId}"
         }

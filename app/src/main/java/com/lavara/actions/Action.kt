@@ -29,6 +29,22 @@ sealed interface Action {
         }
     }
 
+    /**
+     * Abre un enlace web ([url], con http:// o https://) en el navegador o en la app que lo maneje.
+     * En los registros solo se escribe el sitio ([host]), nunca el enlace completo: puede llevar claves.
+     */
+    @Serializable
+    @SerialName("open_url")
+    data class OpenUrl(
+        val url: String,
+    ) : Action {
+        init {
+            require(url.startsWith("http://") || url.startsWith("https://")) { "url debe empezar con http:// o https://" }
+        }
+
+        val host: String get() = runCatching { java.net.URI(url).host }.getOrNull() ?: "enlace"
+    }
+
     /** Espera [seconds] segundos antes de la acción siguiente, sin trabar el teléfono. */
     @Serializable
     @SerialName("delay")

@@ -18,6 +18,22 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Pedir que el ahorro de batería no frene a La Vara (el usuario lo confirma). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Abrir otras apps cuando La Vara está en segundo plano (Android 10+ lo exige). El usuario lo
+         concede en Ajustes ("Mostrar sobre otras apps"), solo si una automatización abre apps. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Ver las apps que aparecen en el menú de apps, para elegir cuál abrir (Android 11+ lo exige). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- Saber si hay un navegador para abrir enlaces. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
 
     <application
         android:name=".LaVaraApp"

@@ -48,6 +48,7 @@ class AutomationJsonTest {
                 actions = listOf(
                     Action.ShowNotification("Hola", "Batería %battery %"),
                     Action.OpenApp("com.whatsapp"),
+                    Action.OpenUrl("https://waze.com/ul?ll=9.93,-84.08"),
                     Action.Delay(10),
                     Action.RunAutomation("otra"),
                 ),
@@ -88,14 +89,20 @@ class AutomationJsonTest {
         val text = AutomationJson.encode(
             base(Trigger.Battery(15, BatteryDirection.ABOVE)).copy(
                 conditions = listOf(Condition.TimeBetween("01:00", "02:00")),
-                actions = listOf(Action.OpenApp("a.b"), Action.Delay(1)),
+                actions = listOf(Action.OpenApp("a.b"), Action.OpenUrl("https://x.cr"), Action.Delay(1)),
                 onError = OnError.CONTINUE,
             ),
         )
         listOf(
             "\"type\": \"battery\"", "\"direction\": \"above\"", "\"type\": \"time_between\"",
-            "\"type\": \"open_app\"", "\"type\": \"delay\"", "\"onError\": \"continue\"",
+            "\"type\": \"open_app\"", "\"type\": \"open_url\"", "\"url\": \"https://x.cr\"", "\"type\": \"delay\"", "\"onError\": \"continue\"",
         ).forEach { assertTrue("Falta $it en\n$text", text.contains(it)) }
+    }
+
+    @Test
+    fun enlace_soloHttp_yHostSinRutaNiClaves() {
+        assertThrows(IllegalArgumentException::class.java) { Action.OpenUrl("waze.com") }
+        assertEquals("waze.com", Action.OpenUrl("https://waze.com/ul?token=secreto").host)
     }
 
     @Test
