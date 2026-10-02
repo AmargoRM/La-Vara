@@ -48,6 +48,8 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.util.UUID
 
+private const val KEY_ERRORS_SEEN = "errores_vistos_hasta"
+
 /**
  * Inicio: resumen del motor, lo que falta para que las alarmas funcionen y la lista de automatizaciones
  * (activar, probar, editar, duplicar, eliminar). El editor se abre con [onEdit] (id null = nueva).
@@ -68,6 +70,9 @@ fun AutomationsSection(
     // Hora elegida que todavía falta confirmar: automatización y hora nueva "HH:mm".
     var pendingTime by remember { mutableStateOf<Pair<Automation, Trigger.Time>?>(null) }
     var pendingDelete by remember { mutableStateOf<Automation?>(null) }
+    // Hasta qué momento el usuario ya vio o descartó los errores; los anteriores no se avisan en Inicio.
+    var errorsSeenAt by remember { mutableStateOf(Long.MAX_VALUE) }
+    LaunchedEffect(Unit) { errorsSeenAt = container.settingsRepository.get(KEY_ERRORS_SEEN)?.toLongOrNull() ?: 0L }
 
     val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         container.logger.info("Permisos", "Permiso de notificaciones: ${if (granted) "concedido" else "negado"}")
@@ -100,7 +105,15 @@ fun AutomationsSection(
         val now = container.clock.now()
         val nowMillis = now.toInstant().toEpochMilli()
         val lastRun = runs.firstOrNull { it.status == ExecutionStatus.EXECUTED.name || it.status == ExecutionStatus.FAILED.name }
-        val recentErrors = runs.count { it.status == ExecutionStatus.FAILED.name && nowMillis - it.startedAt < 24 * 3_600_000L }
+        val recentErrors = runs.count {
+            it.status == ExecutionStatus.FAILED.name && nowMillis - it.startedAt < 24 * 3_600_000L && it.startedAt > errorsSeenAt
+        }
+
+        // Los errores siguen en Historial; esto solo saca el aviso de Inicio hasta que haya uno nuevo.
+        fun markErrorsSeen() {
+            errorsSeenAt = nowMillis
+            scope.launch { container.settingsRepository.set(KEY_ERRORS_SEEN, nowMillis.toString()) }
+        }
 
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -127,7 +140,7 @@ fun AutomationsSection(
 
         if (recentErrors > 0) {
             Card(
-                Modifier.fillMaxWidth().clickable(onClick = onShowHistory),
+                Modifier.fillMaxWidth().clickable { markErrorsSeen(); onShowHistory() },
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
             ) {
                 Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -137,6 +150,9 @@ fun AutomationsSection(
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f),
                     )
+                    TextButton(onClick = { markErrorsSeen() }) {
+                        Text("Ocultar", color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
                     Text("Ver", color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold)
                 }
             }
