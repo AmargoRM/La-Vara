@@ -46,6 +46,14 @@ class MainActivity : ComponentActivity() {
     // Sube en 1 cada vez que la app se abre desde la notificación de versión nueva.
     private var installRequest by mutableIntStateOf(0)
 
+    // Sube cada vez que la app vuelve al frente: la pantalla vuelve a revisar permisos y ajustes.
+    private var resumeCount by mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        resumeCount++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -57,6 +65,7 @@ class MainActivity : ComponentActivity() {
                     versionLabel = AppInfo.versionLabel(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                     container = container,
                     installRequest = installRequest,
+                    resumeCount = resumeCount,
                 )
             }
         }
@@ -73,7 +82,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: Int) {
+fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: Int, resumeCount: Int) {
     var tab by rememberSaveable { mutableStateOf(Tab.INICIO) }
     // Si la app se abrió desde la notificación de versión nueva, mostrar la tarjeta de actualizaciones.
     LaunchedEffect(installRequest) { if (installRequest > 0) tab = Tab.INICIO }
@@ -94,7 +103,7 @@ fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: In
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (tab) {
-                Tab.INICIO -> StartTab(versionLabel, container, installRequest)
+                Tab.INICIO -> StartTab(versionLabel, container, installRequest, resumeCount)
                 Tab.HISTORIAL -> HistoryScreen(container)
             }
         }
@@ -107,7 +116,7 @@ private enum class Tab(val label: String, @DrawableRes val icon: Int) {
 }
 
 @Composable
-private fun StartTab(versionLabel: String, container: AppContainer, installRequest: Int) {
+private fun StartTab(versionLabel: String, container: AppContainer, installRequest: Int, resumeCount: Int) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -130,6 +139,8 @@ private fun StartTab(versionLabel: String, container: AppContainer, installReque
             color = MaterialTheme.colorScheme.onBackground,
         )
         Spacer(Modifier.height(32.dp))
+        AutomationsSection(container = container, resumeCount = resumeCount)
+        Spacer(Modifier.height(24.dp))
         UpdateSection(container = container, installRequest = installRequest)
     }
 }

@@ -49,13 +49,14 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - **Prueba en el teléfono:** abrir Historial, ver el log "app iniciada", exportarlo por WhatsApp o correo.
 
 ### S3 — El corazón: trigger de hora exacta
-- [ ] Programador con `AlarmManager.setExactAndAllowWhileIdle` (o `setAlarmClock` si hace falta). Declarar `USE_EXACT_ALARM` y `SCHEDULE_EXACT_ALARM` según lo que diga `LIMITES_ANDROID.md`.
-- [ ] Receiver de alarma → `TriggerEvent` → motor → siguiente alarma programada.
-- [ ] Reprogramación en `BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`, `TIME_SET`, `TIMEZONE_CHANGED`.
-- [ ] Acción `ShowNotification` real (canal propio, permiso `POST_NOTIFICATIONS` bajo demanda).
-- [ ] Condición de batería leyendo el estado real.
-- [ ] Pedir exclusión de optimización de batería con explicación previa.
-- [ ] Crear automáticamente la automatización "Prueba Vara" desactivada, como plantilla.
+- [x] Programador con `AlarmManager.setExactAndAllowWhileIdle` (o `setAlarmClock` si hace falta). Declarar `USE_EXACT_ALARM` y `SCHEDULE_EXACT_ALARM` según lo que diga `LIMITES_ANDROID.md`.
+- [x] Receiver de alarma → `TriggerEvent` → motor → siguiente alarma programada.
+- [x] Reprogramación en `BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`, `TIME_SET`, `TIMEZONE_CHANGED`.
+- [x] Acción `ShowNotification` real (canal propio, permiso `POST_NOTIFICATIONS` bajo demanda).
+- [x] Condición de batería leyendo el estado real.
+- [x] Pedir exclusión de optimización de batería con explicación previa.
+- [x] Crear automáticamente la automatización "Prueba Vara" desactivada, como plantilla.
+- [x] Controles mínimos en Inicio (activar, cambiar hora, probar ahora) para poder hacer la prueba antes del editor de S4.
 - **Prueba en el teléfono:** el criterio de éxito del MVP completo, con la hora puesta 3 minutos adelante.
 
 ### S4 — Editor y control
