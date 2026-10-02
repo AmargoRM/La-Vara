@@ -32,6 +32,27 @@ jobs:
       - name: Compilar y correr tests
         run: ./gradlew assembleDebug testDebugUnitTest --stacktrace
 
+      # Room escribe el esquema de la base en app/schemas al compilar. Tiene que estar en el repo:
+      # si cambió y no se subió, falta escribir la migración (CLAUDE.md, regla 4).
+      - name: Comprobar esquema de la base de datos
+        run: |
+          if [ -n "$(git status --porcelain app/schemas)" ]; then
+            git status --porcelain app/schemas
+            # También se imprime comprimido en una línea, para copiarlo desde el log si no se puede bajar el artifact
+            # (se recupera con: echo "<texto>" | base64 -d | tar xz).
+            echo "ESQUEMA_TGZ_BASE64=$(git ls-files --others --modified app/schemas | tar czf - -T - | base64 -w0)"
+            echo "::error::El esquema de la base de datos cambió y no está en el repo. Descargá el artifact 'esquema-room', subí app/schemas y escribí la Migration."
+            exit 1
+          fi
+
+      - name: Guardar esquema nuevo
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: esquema-room
+          path: app/schemas/
+          retention-days: 7
+
       - name: Guardar reporte de tests
         if: failure()
         uses: actions/upload-artifact@v7

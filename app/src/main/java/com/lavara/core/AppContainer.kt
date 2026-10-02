@@ -1,16 +1,35 @@
 package com.lavara.core
 
 import android.content.Context
+import com.lavara.data.AutomationRepository
+import com.lavara.data.LaVaraDatabase
+import com.lavara.data.RunRepository
+import com.lavara.data.SettingsRepository
+import com.lavara.logging.AppLogger
+import com.lavara.logging.RoomLogger
 import com.lavara.system.update.ApkInstaller
 import com.lavara.system.update.GitHubReleaseClient
 import com.lavara.system.update.TokenStore
 import com.lavara.system.update.UpdateManager
 import com.lavara.system.update.UpdateNotifier
 import com.lavara.system.update.UpdateStatusStore
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 /** Inyección de dependencias manual: aquí se crean y conectan las piezas de la app. */
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
+
+    /** Trabajo de fondo que vive mientras viva la app (por ejemplo, escribir logs). */
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val clock: Clock = DeviceClock
+
+    val database: LaVaraDatabase by lazy { LaVaraDatabase.create(appContext) }
+    val logger: AppLogger by lazy { RoomLogger(database.logDao(), appScope, clock) }
+    val automationRepository by lazy { AutomationRepository(database.automationDao(), logger) }
+    val runRepository by lazy { RunRepository(database) }
+    val settingsRepository by lazy { SettingsRepository(database.settingDao()) }
 
     val updateNotifier = UpdateNotifier(appContext)
     val apkInstaller = ApkInstaller(appContext)
@@ -20,5 +39,6 @@ class AppContainer(context: Context) {
         statusStore = UpdateStatusStore(appContext),
         client = GitHubReleaseClient(),
         notifier = updateNotifier,
+        logger = logger,
     )
 }

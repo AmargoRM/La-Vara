@@ -11,6 +11,7 @@ class LaVaraApp : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        container.logger.info("App", "App iniciada: versión ${BuildConfig.VERSION_NAME} (compilación ${BuildConfig.VERSION_CODE})")
         UpdateWorker.schedule(this)
     }
 }

@@ -2,6 +2,7 @@ package com.lavara.system.update
 
 import android.content.Context
 import com.lavara.BuildConfig
+import com.lavara.logging.AppLogger
 import java.io.File
 import java.time.LocalDate
 
@@ -12,6 +13,7 @@ class UpdateManager(
     private val statusStore: UpdateStatusStore,
     private val client: GitHubReleaseClient,
     private val notifier: UpdateNotifier,
+    private val logger: AppLogger,
 ) {
     private val installedVersionCode = BuildConfig.VERSION_CODE
 
@@ -39,6 +41,8 @@ class UpdateManager(
             }
         }
         statusStore.save(status)
+        // El mensaje nunca incluye el token (ver UpdateErrors).
+        logger.info("Actualizaciones", "Revisión${if (notify) " automática" else ""}: ${status.lastMessage}")
 
         if (notify) {
             status.available?.let {
@@ -63,6 +67,13 @@ class UpdateManager(
     /** Devuelve null si salió bien, o el mensaje de error. */
     suspend fun download(release: ReleaseInfo, onProgress: (Float) -> Unit): String? {
         val token = tokenStore.load() ?: return UpdateErrors.NO_TOKEN
-        return client.downloadApk(token, release, apkFile(), onProgress)
+        logger.info("Actualizaciones", "Descargando ${release.versionName}")
+        val error = client.downloadApk(token, release, apkFile(), onProgress)
+        if (error == null) {
+            logger.info("Actualizaciones", "Descarga completa de ${release.versionName}")
+        } else {
+            logger.error("Actualizaciones", "Falló la descarga de ${release.versionName}: $error")
+        }
+        return error
     }
 }
