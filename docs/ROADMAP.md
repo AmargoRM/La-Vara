@@ -1,0 +1,97 @@
+# La Vara — Hoja de ruta
+
+Cada casilla es una sesión de Claude Code y un PR. Se trabajan en orden.
+Una casilla se marca `[x]` solo cuando CI está en verde y la prueba en el teléfono está escrita en el PR.
+
+---
+
+## ETAPA 1 — MVP
+
+**Criterio de éxito del MVP (la prueba que manda):**
+Crear "Prueba Vara": CUANDO 08:00, SI batería > 20 %, HACER mostrar notificación.
+Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora. Al abrir La Vara, el historial muestra la ejecución con su detalle.
+
+### S0 — Esqueleto, CI y firma
+- [ ] Proyecto Android vacío (`com.lavara`) con Compose, tema con color principal `#0F7C73`, modo claro/oscuro del sistema y una pantalla "LA VARA".
+- [ ] `gradle/libs.versions.toml` con versiones estables actuales.
+- [ ] `.gitignore` correcto (keystores, `local.properties`, build).
+- [ ] Workflow `.github/workflows/build.yml`: en cada push y PR compila, corre tests unitarios y, en `main`, firma el APK release y lo publica en un GitHub Release (sobrescribiendo uno llamado `ultima`), para que el usuario lo descargue directo desde el navegador del teléfono.
+- [ ] `versionCode` = número de ejecución de Actions, para que cada APK se instale como actualización.
+- [ ] Firma con llave fija leída de GitHub Secrets. El usuario no usa terminal ni Java: diseñar el método más simple para crear la llave una sola vez (por ejemplo, un workflow manual que la genera y la entrega como artifact descargable), y guiarlo paso a paso para guardar la copia de respaldo y cargar los secretos. Explicar despacio por qué perder o cambiar la llave obliga a desinstalar y borra los datos.
+- [ ] `docs/FORMATO_JSON.md` creado (vacío con estructura), `docs/LIMITES_ANDROID.md` revisado.
+- **Prueba en el teléfono:** descargar `ultima`, instalar, abrir, ver "LA VARA". Hacer un segundo push trivial, instalar encima sin desinstalar.
+
+### S1 — Modelo y motor (Kotlin puro)
+- [ ] `Automation` (id, name, description, enabled, priority, trigger, conditions, actions, onError, cooldownSeconds, createdAt, updatedAt, lastExecutedAt, executionCount, failureCount).
+- [ ] `Trigger`, `Condition`, `Action` como sealed interfaces serializables. Tipos iniciales: `Time` (hora + días de semana), `Battery` (umbral, arriba/abajo), `Manual`; condiciones `BatteryLevel`, `TimeBetween`, `And`, `Or`, `Not`; acciones `ShowNotification`, `OpenApp`, `Delay`.
+- [ ] `AutomationEngine`: recibe `TriggerEvent`, filtra activas y compatibles, evalúa condiciones, ejecuta acciones en secuencia sin bloquear, aplica cooldown y deduplicación, devuelve `ExecutionResult` (success, timestamp, automationId, duration, executedActions, failedAction, errorMessage).
+- [ ] Variables básicas de solo lectura en el contexto: `%battery`, `%time`, `%date`.
+- [ ] `docs/FORMATO_JSON.md` completo con un ejemplo por tipo. Este documento debe permitir que otra IA escriba automatizaciones válidas sin ver el código.
+- [ ] Tests: condiciones anidadas, cooldown, deduplicación, ida y vuelta JSON de cada tipo, falla de acción con CONTINUE y STOP.
+- **Prueba en el teléfono:** ninguna visible; solo CI en verde.
+
+### S2 — Persistencia, logs e historial
+- [ ] Room: tablas `automations` (columnas de resumen + `definition` JSON), `automation_runs`, `logs`, `settings`. Esquema exportado al repo.
+- [ ] Repositorios y `AppContainer`.
+- [ ] Logger estructurado (nivel, hora, origen, mensaje, automationId opcional).
+- [ ] Pantalla **Historial**: lista de ejecuciones y de logs, con filtro por automatización y nivel.
+- [ ] Botón **Exportar logs**: genera un texto y abre el menú Compartir de Android (para pegárselo a Claude).
+- [ ] Tests Room con Robolectric.
+- **Prueba en el teléfono:** abrir Historial, ver el log "app iniciada", exportarlo por WhatsApp o correo.
+
+### S3 — El corazón: trigger de hora exacta
+- [ ] Programador con `AlarmManager.setExactAndAllowWhileIdle` (o `setAlarmClock` si hace falta). Declarar `USE_EXACT_ALARM` y `SCHEDULE_EXACT_ALARM` según lo que diga `LIMITES_ANDROID.md`.
+- [ ] Receiver de alarma → `TriggerEvent` → motor → siguiente alarma programada.
+- [ ] Reprogramación en `BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`, `TIME_SET`, `TIMEZONE_CHANGED`.
+- [ ] Acción `ShowNotification` real (canal propio, permiso `POST_NOTIFICATIONS` bajo demanda).
+- [ ] Condición de batería leyendo el estado real.
+- [ ] Pedir exclusión de optimización de batería con explicación previa.
+- [ ] Crear automáticamente la automatización "Prueba Vara" desactivada, como plantilla.
+- **Prueba en el teléfono:** el criterio de éxito del MVP completo, con la hora puesta 3 minutos adelante.
+
+### S4 — Editor y control
+- [ ] Dashboard: estado del motor, cantidad de automatizaciones y activas, última ejecución, último evento, errores recientes, lista con interruptor activar/desactivar.
+- [ ] Editor en tres pasos: ¿CUÁNDO? → ¿SI? → ¿HACER QUÉ?, con reordenar acciones. Formularios simples, sin construcción visual por arrastre todavía.
+- [ ] Ejecutar manualmente, duplicar, eliminar (con confirmación).
+- **Prueba en el teléfono:** crear desde cero "Prueba Vara" con el editor y repetir el criterio de éxito.
+
+### S5 — Cierre del MVP
+- [ ] Trigger de batería (umbral, cargador conectado/desconectado) por broadcasts.
+- [ ] Acción `OpenApp` con selector de apps instaladas (nombre, paquete, ícono) y la solución para abrir apps desde segundo plano descrita en `LIMITES_ANDROID.md`.
+- [ ] Acción `Delay` sin bloquear (corta: dentro de la ejecución; larga: alarma).
+- [ ] Pantalla **Permisos** con semáforo: verde concedido, amarillo opcional, rojo necesario para una automatización existente; cada fila abre su ajuste.
+- [ ] Importar y exportar automatizaciones como archivo JSON (selector de archivos del sistema) y desde el portapapeles.
+- **Prueba en el teléfono:** exportar todo, desinstalar en un teléfono de prueba o borrar datos, importar, verificar que todo vuelve.
+
+---
+
+## ETAPA 2 — Lo que la vuelve útil (orden por utilidad para el usuario)
+
+- [ ] **S6 Intents de entrada:** otras apps (GPS TICO, Garúa Aforos, atajos del launcher) pueden ejecutar una automatización por nombre o id. Atajos de pantalla de inicio y tile de Ajustes rápidos.
+- [ ] **S7 NFC:** pantalla "Etiquetas NFC" (nombre, UID, última lectura, automatización asociada, contador). Leer UID y NDEF; escribir NDEF propio para que la etiqueta abra La Vara directamente.
+- [ ] **S8 HTTP + JSON:** `HttpAction` (GET/POST/PUT/PATCH/DELETE, headers, body, timeout), guardar respuesta en variables con rutas JSON, variables personalizadas `%nombre`. Tokens en Android Keystore. Plantilla incluida: disparar un workflow de GitHub (`repository_dispatch`).
+- [ ] **S9 Ubicación y geocercas:** geocercas manuales, entrar/salir/permanecer X minutos. Fuente de geocercas desde URL GeoJSON (por ejemplo `casos.geojson` de Nube-amarga), refrescada periódicamente, respetando el límite de 100. Variables `%lat`, `%lon`.
+- [ ] **S10 Bitácora de campo:** acción "registrar en bitácora" (hora, punto, automatización, nota) con exportación CSV/GeoJSON.
+- [ ] **S11 Compartir hacia La Vara:** recibir texto, URL, ubicación o imagen desde el menú Compartir y pasarlo como variables a una automatización. Convertir coordenadas a CRTM05 (EPSG:5367).
+- [ ] **S12 Notificaciones entrantes:** `NotificationListenerService` con filtros por app, título y texto.
+- [ ] **S13 Bluetooth y Wi-Fi:** conectado/desconectado a un dispositivo emparejado o a una red concreta.
+- [ ] **S14 Widget** de pantalla de inicio con automatizaciones favoritas.
+- [ ] **S15 Más acciones del sistema:** vibrar, sonido, volumen, multimedia, abrir URL, abrir ajuste, compartir texto, copiar al portapapeles, brillo (con permiso especial).
+- [ ] **S16 Archivos:** crear, escribir, añadir, leer, copiar, mover, eliminar, existe, dentro de carpetas que el usuario elija (Storage Access Framework).
+
+## ETAPA 3 — Avanzado
+
+- [ ] Evaluador de expresiones seguro (`%battery < 20`, `contains`, operaciones matemáticas), sin ejecutar código arbitrario.
+- [ ] Control de flujo: IF/ELSE, LOOP, WAIT hasta condición con timeout, STOP, RETURN, RunAutomation con protección de ciclos.
+- [ ] Sensores (detectar los disponibles en el teléfono antes de ofrecerlos), movimiento/quietud, proximidad, luz.
+- [ ] Llamadas y SMS entrantes.
+- [ ] Modo Debug/Laboratorio: ver eventos en vivo, inspeccionar variables, probar triggers.
+- [ ] Sistema de plugins sobre la interfaz `AutomationPlugin`.
+- [ ] AccessibilityService solo para lo que no tenga API pública, explicado en la app.
+- [ ] Comandos de voz, OCR, QR, cámara.
+
+## Fuera de alcance
+
+- Publicar en Google Play.
+- IA dentro de la app. Las automatizaciones se generan fuera (pidiéndoselas a Claude con `docs/FORMATO_JSON.md`) y se importan.
+- Root, APIs privadas, vigilancia.
