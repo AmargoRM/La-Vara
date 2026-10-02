@@ -4,9 +4,8 @@ import com.lavara.core.Clock
 import com.lavara.data.LogDao
 import com.lavara.data.LogEntity
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 enum class LogLevel { INFO, WARN, ERROR }
 
@@ -22,30 +21,42 @@ interface AppLogger {
     fun error(source: String, message: String, automationId: String? = null) = log(LogLevel.ERROR, source, message, automationId)
 }
 
-/** Escribe en Room sin trabar a quien registra; cada [TRIM_EVERY] registros borra los más viejos. */
+/**
+ * Escribe en Room sin trabar a quien registra. Una sola corrutina escribe, en el orden en que se
+ * llamó a [log]; cada [TRIM_EVERY] registros borra los más viejos.
+ */
 class RoomLogger(
     private val dao: LogDao,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
     private val clock: Clock,
 ) : AppLogger {
-    private val mutex = Mutex()
-    private var writes = 0
+    private val queue = Channel<LogEntity>(Channel.UNLIMITED)
 
-    override fun log(level: LogLevel, source: String, message: String, automationId: String?) {
-        val entry = LogEntity(
-            timestamp = clock.now().toInstant().toEpochMilli(),
-            level = level.name,
-            source = source,
-            message = message.take(MAX_MESSAGE),
-            automationId = automationId,
-        )
+    init {
         scope.launch {
-            // El orden de escritura respeta el orden de llamada.
-            mutex.withLock {
+            var writes = 0
+            for (entry in queue) {
                 dao.insert(entry)
                 if (++writes % TRIM_EVERY == 0) dao.trim(MAX_LOGS)
             }
         }
+    }
+
+    override fun log(level: LogLevel, source: String, message: String, automationId: String?) {
+        queue.trySend(
+            LogEntity(
+                timestamp = clock.now().toInstant().toEpochMilli(),
+                level = level.name,
+                source = source,
+                message = message.take(MAX_MESSAGE),
+                automationId = automationId,
+            ),
+        )
+    }
+
+    /** Para tests: deja de aceptar registros; la escritura termina cuando vacía la cola. */
+    fun close() {
+        queue.close()
     }
 
     companion object {

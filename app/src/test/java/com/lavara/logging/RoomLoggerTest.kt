@@ -30,8 +30,10 @@ class RoomLoggerTest {
         logger.info("App", "App iniciada", null)
         logger.warn("Alarmas", "Alarma atrasada", "prueba-vara")
         logger.error("Acciones", "x".repeat(5_000), "prueba-vara")
+        logger.close()
         scope.coroutineContext.job.children.forEach { it.join() }
 
+        // Mismo timestamp: el id dice el orden de escritura.
         val logs = db.logDao().latest(10).sortedBy { it.id }
         assertEquals(listOf("INFO", "WARN", "ERROR"), logs.map { it.level })
         assertEquals("App iniciada", logs[0].message)
