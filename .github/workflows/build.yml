@@ -52,11 +52,10 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.LAVARA_KEYSTORE_PASSWORD }}
         run: |
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
-            ENSAYO_PASS=$(openssl rand -hex 16)
+            # Llave desechable, válida 1 día; su contraseña no protege nada real.
             keytool -genkeypair -keystore "$RUNNER_TEMP/lavara.p12" -storetype PKCS12 \
-              -storepass "$ENSAYO_PASS" -keypass "$ENSAYO_PASS" -alias lavara \
+              -storepass ensayo-desechable -keypass ensayo-desechable -alias lavara \
               -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Ensayo" > /dev/null 2>&1
-            echo "LAVARA_KEYSTORE_PASSWORD=$ENSAYO_PASS" >> "$GITHUB_ENV"
             echo "existe=true" >> "$GITHUB_OUTPUT"
             echo "publicar=false" >> "$GITHUB_OUTPUT"
           elif [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
@@ -66,7 +65,6 @@ jobs:
             echo "existe=false" >> "$GITHUB_OUTPUT"
           else
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lavara.p12"
-            echo "LAVARA_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
             echo "existe=true" >> "$GITHUB_OUTPUT"
             echo "publicar=true" >> "$GITHUB_OUTPUT"
           fi
@@ -75,6 +73,8 @@ jobs:
         if: steps.llave.outputs.existe == 'true'
         env:
           LAVARA_KEYSTORE_FILE: ${{ runner.temp }}/lavara.p12
+          # La contraseña real solo entra a este paso, nunca al entorno general del job.
+          LAVARA_KEYSTORE_PASSWORD: ${{ github.ref == 'refs/heads/main' && secrets.LAVARA_KEYSTORE_PASSWORD || 'ensayo-desechable' }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Verificar firma
