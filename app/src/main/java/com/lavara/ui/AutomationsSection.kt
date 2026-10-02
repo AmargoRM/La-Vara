@@ -159,6 +159,7 @@ private fun AutomationCard(
     onChangeTime: (Trigger.Time) -> Unit,
     onRunNow: () -> Unit,
 ) {
+    val context = LocalContext.current
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
