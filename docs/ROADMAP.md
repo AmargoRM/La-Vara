@@ -21,6 +21,15 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - [x] `docs/FORMATO_JSON.md` creado (vacío con estructura), `docs/LIMITES_ANDROID.md` revisado.
 - **Prueba en el teléfono:** descargar `ultima`, instalar, abrir, ver "LA VARA". Hacer un segundo push trivial, instalar encima sin desinstalar.
 
+### S0.5 — Actualizaciones dentro de la app (pedido del usuario, agregado antes de S1)
+- [x] Token de GitHub de solo lectura guardado cifrado con Android Keystore; se pega una vez en la app.
+- [x] Revisión de versión nueva al tocar "Buscar actualización" y cada 12 horas en segundo plano con WorkManager (solo con internet).
+- [x] Notificación "Hay una versión nueva" (una vez por versión) que abre La Vara, descarga el APK y abre el instalador de Android.
+- [x] Aviso en pantalla y por notificación cuando el token vence en 14 días o menos.
+- [x] El Release incluye una marca invisible `versionCode=N` para que la app sepa qué número publicó.
+- [x] Tests: lectura de la respuesta de GitHub, comparación de versiones, mensajes de error, vencimiento del token.
+- **Prueba en el teléfono:** instalar a mano la primera versión con esta función, pegar el token, publicar otra versión y actualizar desde la notificación.
+
 ### S1 — Modelo y motor (Kotlin puro)
 - [ ] `Automation` (id, name, description, enabled, priority, trigger, conditions, actions, onError, cooldownSeconds, createdAt, updatedAt, lastExecutedAt, executionCount, failureCount).
 - [ ] `Trigger`, `Condition`, `Action` como sealed interfaces serializables. Tipos iniciales: `Time` (hora + días de semana), `Battery` (umbral, arriba/abajo), `Manual`; condiciones `BatteryLevel`, `TimeBetween`, `And`, `Or`, `Not`; acciones `ShowNotification`, `OpenApp`, `Delay`.

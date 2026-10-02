@@ -108,5 +108,7 @@ jobs:
           gh release create ultima La-Vara.apk \
             --target "$GITHUB_SHA" \
             --title "La Vara 0.1.${LAVARA_VERSION_CODE}" \
-            --notes "Última versión de La Vara. Compilación ${LAVARA_VERSION_CODE}, commit ${GITHUB_SHA::7}. Descargá La-Vara.apk desde el teléfono e instalalo encima de la versión anterior." \
+            --notes "Última versión de La Vara. Compilación ${LAVARA_VERSION_CODE}, commit ${GITHUB_SHA::7}. Descargá La-Vara.apk desde el teléfono e instalalo encima de la versión anterior.
+
+          <!-- versionCode=${LAVARA_VERSION_CODE} -->" \
             --latest
