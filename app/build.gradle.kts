@@ -2,6 +2,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.androidx.room)
 }
 
 // En GitHub Actions, LAVARA_VERSION_CODE es el número de ejecución del workflow:
@@ -49,6 +51,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    testOptions {
+        // Robolectric necesita los recursos de Android para correr los tests de Room sin teléfono.
+        unitTests.isIncludeAndroidResources = true
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -67,5 +74,16 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
     testImplementation(libs.junit)
+    testImplementation(libs.robolectric)
+}
+
+// Room guarda aquí el esquema de cada versión de la base de datos. Se sube al repo:
+// sirve para escribir y probar las migraciones cuando cambie el esquema.
+room {
+    schemaDirectory("$projectDir/schemas")
 }

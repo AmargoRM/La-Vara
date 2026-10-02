@@ -38,7 +38,8 @@ enum class ExecutionStatus {
     SKIPPED_DISABLED,
 }
 
-/** Una acción hecha: cuál, cuánto tardó y si salió bien. */
+/** Una acción hecha: cuál, cuánto tardó y si salió bien. Se guarda como JSON en el historial. */
+@kotlinx.serialization.Serializable
 data class ActionRecord(
     val index: Int,
     val action: String,
