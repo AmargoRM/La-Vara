@@ -1,39 +1,192 @@
 # Formato JSON de automatizaciones de La Vara
 
-> **Estado:** estructura vacía (S0). Se completa en S1, cuando existan los tipos en el código.
 > Este documento es el contrato que permite a otra IA escribir automatizaciones válidas sin ver el código.
+> El código que lo implementa está en `com.lavara.automation`, `triggers`, `conditions` y `actions`.
+> El test `AutomationJsonTest.ejemploDelDocumento_pruebaVara` lee el ejemplo de la sección 8: si falla, este documento quedó desactualizado.
 
 ## 1. Reglas generales
 
-_Pendiente (S1): codificación, campos obligatorios, valores por defecto, compatibilidad hacia atrás._
+- Texto UTF-8, JSON estándar. Una automatización es un objeto JSON.
+- Los nombres de campo distinguen mayúsculas (`onError`, no `onerror`).
+- Cada trigger, condición y acción es un objeto con un campo `"type"` que dice qué es. Los valores de `"type"` de este documento **nunca cambian**.
+- Los campos marcados "opcional" pueden faltar: se usa el valor por defecto indicado.
+- Los campos que La Vara no conoce se ignoran. Así un archivo hecho por una versión más nueva se puede abrir en una más vieja.
+- Un `"type"` desconocido, un campo obligatorio que falta o un valor fuera de rango hacen que la automatización se rechace entera.
+- Las horas se escriben como texto `"HH:mm"` en formato de 24 horas: `"08:00"`, `"22:30"`. Van de `"00:00"` a `"23:59"`.
+- Las fechas guardadas (`createdAt`, etc.) son milisegundos desde el 1 de enero de 1970 en UTC.
 
 ## 2. Automatización
 
-_Pendiente (S1): campos de `Automation` con tipo, obligatoriedad y ejemplo._
+Se lee así: **CUANDO** pasa `trigger`, **SI** se cumplen todas las `conditions`, **HACER** las `actions` en orden.
+
+| Campo | Tipo | Obligatorio | Por defecto | Qué es |
+|---|---|---|---|---|
+| `id` | texto | sí | — | Identificador único, sin espacios recomendado (`"prueba-vara"`). No puede estar vacío. Lo usa `run_automation`. |
+| `name` | texto | sí | — | Nombre visible. |
+| `description` | texto | no | `""` | Nota libre. |
+| `enabled` | booleano | no | `true` | `false` = no se dispara sola. Se puede ejecutar a mano, pero el historial dirá que está desactivada y no hará nada. |
+| `priority` | entero | no | `0` | Si varias responden al mismo evento, corre primero la de número mayor. |
+| `trigger` | objeto | sí | — | Ver sección 3. Exactamente uno. |
+| `conditions` | lista | no | `[]` | Ver sección 4. Se tienen que cumplir **todas**. Lista vacía = siempre. |
+| `actions` | lista | no | `[]` | Ver sección 5. Se hacen en orden, una tras otra. |
+| `onError` | texto | no | `"stop"` | Ver sección 6. |
+| `cooldownSeconds` | entero ≥ 0 | no | `0` | Segundos mínimos entre dos ejecuciones. `0` = sin espera. |
+| `createdAt`, `updatedAt` | entero | no | `0` | Los completa la app. |
+| `lastExecutedAt` | entero o `null` | no | `null` | Los completa la app. |
+| `executionCount`, `failureCount` | entero | no | `0` | Los completa la app. |
+
+Al escribir una automatización a mano, alcanza con `id`, `name`, `trigger` y `actions`.
 
 ## 3. Triggers (cuándo)
 
-_Pendiente (S1): un ejemplo por tipo (`Time`, `Battery`, `Manual`)._
+### `time`: a una hora fija
+
+```json
+{ "type": "time", "time": "08:00", "days": ["monday", "wednesday", "friday"] }
+```
+
+- `time` (obligatorio): hora `"HH:mm"`.
+- `days` (opcional, por defecto `[]`): días en que corre. Lista vacía = todos los días. Valores: `"monday"`, `"tuesday"`, `"wednesday"`, `"thursday"`, `"friday"`, `"saturday"`, `"sunday"`.
+
+### `battery`: la batería cruza un umbral
+
+```json
+{ "type": "battery", "threshold": 20, "direction": "below" }
+```
+
+- `threshold` (obligatorio): porcentaje de 0 a 100.
+- `direction` (obligatorio): `"below"` = cuando baja hasta el umbral o menos; `"above"` = cuando sube hasta el umbral o más.
+- Se dispara **una vez al cruzar** el umbral, no en cada cambio mientras la batería sigue del mismo lado.
+
+### `manual`: solo a mano
+
+```json
+{ "type": "manual" }
+```
+
+No se dispara sola. Corre con el botón de ejecutar, con un atajo o desde otra automatización (`run_automation`).
+Cualquier automatización, tenga el trigger que tenga, también se puede ejecutar a mano.
 
 ## 4. Condiciones (si)
 
-_Pendiente (S1): un ejemplo por tipo (`BatteryLevel`, `TimeBetween`, `And`, `Or`, `Not`)._
+### `battery_level`: nivel de batería
+
+```json
+{ "type": "battery_level", "comparison": "greater_than", "value": 20 }
+```
+
+- `comparison` (obligatorio): `"greater_than"` (>), `"greater_or_equal"` (≥), `"less_than"` (<), `"less_or_equal"` (≤), `"equal"` (=).
+- `value` (obligatorio): porcentaje de 0 a 100.
+- Si el teléfono no informa la batería, la condición **no** se cumple.
+
+### `time_between`: la hora actual está en un rango
+
+```json
+{ "type": "time_between", "start": "22:00", "end": "06:00" }
+```
+
+- `start` (obligatorio) se incluye; `end` (obligatorio) no se incluye.
+- Si `end` es menor que `start`, el rango cruza la medianoche: el ejemplo vale de 22:00 a 05:59.
+
+### `and`: todas
+
+```json
+{ "type": "and", "conditions": [ { "type": "battery_level", "comparison": "less_than", "value": 50 }, { "type": "time_between", "start": "08:00", "end": "18:00" } ] }
+```
+
+Lista vacía = se cumple.
+
+### `or`: al menos una
+
+```json
+{ "type": "or", "conditions": [ { "type": "time_between", "start": "06:00", "end": "08:00" }, { "type": "time_between", "start": "18:00", "end": "20:00" } ] }
+```
+
+Lista vacía = no se cumple.
+
+### `not`: lo contrario
+
+```json
+{ "type": "not", "condition": { "type": "battery_level", "comparison": "equal", "value": 100 } }
+```
+
+`and`, `or` y `not` se pueden anidar sin límite.
 
 ## 5. Acciones (hacer qué)
 
-_Pendiente (S1): un ejemplo por tipo (`ShowNotification`, `OpenApp`, `Delay`)._
+### `show_notification`: mostrar una notificación
+
+```json
+{ "type": "show_notification", "title": "Batería", "text": "Quedan %battery % a las %time" }
+```
+
+- `title` (obligatorio), `text` (opcional, por defecto `""`). Ambos aceptan variables (sección 7).
+
+### `open_app`: abrir una app
+
+```json
+{ "type": "open_app", "packageName": "com.whatsapp" }
+```
+
+- `packageName` (obligatorio, no vacío): el nombre de paquete de la app, no su nombre visible.
+
+### `delay`: esperar
+
+```json
+{ "type": "delay", "seconds": 30 }
+```
+
+- `seconds` (obligatorio, ≥ 0). Espera antes de la acción siguiente sin trabar el teléfono.
+
+### `run_automation`: ejecutar otra automatización
+
+```json
+{ "type": "run_automation", "automationId": "otra-automatizacion" }
+```
+
+- `automationId` (obligatorio): el `id` de la otra.
+- La otra revisa sus propias condiciones, pero ignora su trigger y su `cooldownSeconds`.
+- Falla si la otra no existe, está desactivada o ya se está ejecutando.
+- **Ciclos:** si A ejecuta a B y B ejecuta a A, La Vara lo detecta, se detiene y lo registra como error (`Ciclo detectado: a → b → a`).
 
 ## 6. Política de error
 
-_Pendiente (S1): `onError = CONTINUE | STOP`._
+Qué pasa si una acción falla (por ejemplo, la app a abrir no está instalada):
+
+- `"stop"` (por defecto): se registra el error y **no** se hacen las acciones que faltan.
+- `"continue"`: se registra el error y se sigue con la acción siguiente.
+
+En los dos casos la ejecución queda en el historial como fallida, con la acción que falló y el mensaje de error.
 
 ## 7. Variables
 
-_Pendiente (S1): `%battery`, `%time`, `%date`._
+Se reemplazan en `title` y `text` de `show_notification`, en el momento de ejecutar:
+
+| Variable | Valor | Ejemplo |
+|---|---|---|
+| `%battery` | nivel de batería, sin el signo % (`?` si no se conoce) | `85` |
+| `%time` | hora actual, `HH:mm` | `08:00` |
+| `%date` | fecha actual, `dd/MM/yyyy` | `05/10/2026` |
+
+Son de solo lectura: no se pueden crear ni cambiar.
 
 ## 8. Ejemplo completo
 
-_Pendiente (S1): "Prueba Vara"._
+"Prueba Vara": todos los días a las 08:00, si la batería está por encima de 20 %, mostrar una notificación.
+
+```json
+{
+  "id": "prueba-vara",
+  "name": "Prueba Vara",
+  "trigger": { "type": "time", "time": "08:00" },
+  "conditions": [
+    { "type": "battery_level", "comparison": "greater_than", "value": 20 }
+  ],
+  "actions": [
+    { "type": "show_notification", "title": "Prueba Vara", "text": "Batería %battery % a las %time" }
+  ]
+}
+```
 
 ## 9. Errores frecuentes al importar
 

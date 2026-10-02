@@ -1,0 +1,52 @@
+package com.lavara.triggers
+
+import com.lavara.core.TimeText
+import java.time.ZonedDateTime
+
+/**
+ * Algo que pasó en el teléfono y puede disparar automatizaciones.
+ * [dedupKey] identifica el hecho: si llega dos veces el mismo evento, la segunda se ignora.
+ */
+sealed interface TriggerEvent {
+    val dedupKey: String
+
+    /** Sonó la alarma de la hora [at]. */
+    data class TimeReached(val at: ZonedDateTime) : TriggerEvent {
+        override val dedupKey: String = "time:${at.toLocalDate()}T${at.hour}:${at.minute}"
+    }
+
+    /** Cambió el nivel de batería. [previousLevel] es null si no se conoce. */
+    data class BatteryChanged(val level: Int, val previousLevel: Int?) : TriggerEvent {
+        override val dedupKey: String = "battery:$previousLevel->$level"
+    }
+
+    /** El usuario pidió ejecutar [automationId] a mano. [requestId] distingue cada pedido. */
+    data class ManualRun(val automationId: String, val requestId: String) : TriggerEvent {
+        override val dedupKey: String = "manual:$requestId"
+    }
+}
+
+/** Decide si un trigger corresponde a un evento. Lógica pura, sin Android. */
+object TriggerMatcher {
+    fun matches(trigger: Trigger, automationId: String, event: TriggerEvent): Boolean = when (trigger) {
+        is Trigger.Time -> event is TriggerEvent.TimeReached &&
+            event.at.hour == trigger.timeOfDay().hour &&
+            event.at.minute == trigger.timeOfDay().minute &&
+            (trigger.days.isEmpty() || Weekday.of(event.at.dayOfWeek) in trigger.days)
+
+        is Trigger.Battery -> event is TriggerEvent.BatteryChanged && crosses(trigger, event)
+
+        Trigger.Manual -> false
+    } || (event is TriggerEvent.ManualRun && event.automationId == automationId)
+
+    // Solo dispara al cruzar el umbral, no en cada cambio mientras sigue del mismo lado.
+    private fun crosses(trigger: Trigger.Battery, event: TriggerEvent.BatteryChanged): Boolean {
+        val prev = event.previousLevel
+        return when (trigger.direction) {
+            BatteryDirection.BELOW -> event.level <= trigger.threshold && (prev == null || prev > trigger.threshold)
+            BatteryDirection.ABOVE -> event.level >= trigger.threshold && (prev == null || prev < trigger.threshold)
+        }
+    }
+
+    private fun Trigger.Time.timeOfDay() = TimeText.parseOrNull(time)!!
+}
