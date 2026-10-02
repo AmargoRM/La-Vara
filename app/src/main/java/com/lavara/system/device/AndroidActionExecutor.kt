@@ -3,6 +3,7 @@ package com.lavara.system.device
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.ActivityManager
+import android.app.KeyguardManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -11,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -106,24 +108,35 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         return start(view, "el enlace de ${action.host}", requestCode = action.url.hashCode())
     }
 
-    /** Abre [intent] si Android lo permite; si no, deja una notificación que lo abre al tocarla. */
+    /**
+     * Abre [intent] si Android lo permite; si no, deja una notificación que lo abre al tocarla.
+     * Con el teléfono bloqueado o la pantalla apagada, enciende la pantalla y abre apenas el usuario desbloquea.
+     */
     private fun start(intent: Intent, name: String, requestCode: Int): ActionResult {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        if (isInForeground() || canOpenAppsInBackground()) {
+        val foreground = isInForeground()
+        if (foreground || canOpenAppsInBackground()) {
+            val locked = context.getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
+                !context.getSystemService(PowerManager::class.java).isInteractive
             return try {
-                context.startActivity(intent)
+                context.startActivity(if (locked && !foreground) UnlockAndOpenActivity.intent(context, intent, name) else intent)
                 ActionResult.Success
             } catch (e: RuntimeException) {
                 ActionResult.Failure("Android no dejó abrir $name: ${e.message}")
             }
         }
-        val tap = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
-        val shown = notify("Abrir $name", "Tocá para abrir $name.", tap)
+        val shown = notifyToOpen(intent, name, requestCode)
         return ActionResult.Failure(
             "Android no deja abrir $name con La Vara en segundo plano. " +
                 (if (shown == null) "Se mostró una notificación para abrirla. " else "Tampoco se pudo avisar: $shown ") +
                 "Para que se abra sola, permití \"Mostrar sobre otras apps\" en Inicio.",
         )
+    }
+
+    /** Notificación "Tocá para abrir". Devuelve null si se mostró, o el motivo si no. */
+    fun notifyToOpen(intent: Intent, name: String, requestCode: Int): String? {
+        val tap = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
+        return notify("Abrir $name", "Tocá para abrir $name.", tap)
     }
 
     private fun ensureChannel() {

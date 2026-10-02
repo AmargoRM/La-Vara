@@ -59,6 +59,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Pantalla invisible que enciende la pantalla, pide desbloquear y abre la app o el enlace
+             de una automatización. Tarea propia para no traer al frente la pantalla principal. -->
+        <activity
+            android:name=".system.device.UnlockAndOpenActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <receiver
             android:name=".system.alarm.AlarmReceiver"
             android:exported="false" />
