@@ -71,7 +71,7 @@ class AutomationDraftTest {
 
     @Test
     fun problemas() {
-        assertEquals(listOf("Falta el nombre.", "Falta al menos una acción en el paso 3."), AutomationDraft().problems())
+        assertEquals(listOf("Falta el nombre de la automatización (arriba).", "Falta al menos una acción en el paso 3."), AutomationDraft().problems())
         val blankTitle = AutomationDraft(name = "X", actions = listOf(Action.ShowNotification(" ")))
         assertEquals(listOf("La acción 1 necesita un título."), blankTitle.problems())
         val noTarget = AutomationDraft(name = "X", actions = listOf(Action.RunAutomation("")))
