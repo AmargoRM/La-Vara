@@ -35,6 +35,12 @@
         </intent>
     </queries>
 
+    <!-- Disparador por ubicación: entrar o salir de una zona marcada en el mapa. La ubicación precisa se
+         pide al elegir ese disparador; "todo el tiempo" (segundo plano) se concede en Ajustes. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
     <!-- Escuchar la batería y el cargador con la app cerrada: Android lo permite solo con un servicio
          visible ("La Vara está activa"). specialUse es el tipo para usos que no encajan en los otros. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -74,6 +80,10 @@
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <receiver
+            android:name=".system.location.GeofenceReceiver"
+            android:exported="false" />
 
         <service
             android:name=".system.device.DeviceWatchService"

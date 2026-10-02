@@ -14,6 +14,8 @@ import com.lavara.system.device.AndroidActionExecutor
 import com.lavara.system.device.AndroidDeviceState
 import com.lavara.system.device.BatteryOptimization
 import com.lavara.system.device.DeviceWatcher
+import com.lavara.system.location.GeofenceSync
+import com.lavara.system.location.LocationAccess
 import com.lavara.system.update.ApkInstaller
 import com.lavara.system.update.GitHubReleaseClient
 import com.lavara.system.update.TokenStore
@@ -44,6 +46,8 @@ class AppContainer(context: Context) {
     val engine by lazy { AutomationEngine(automationRepository, actionExecutor, clock, deviceState) }
     val automationRunner by lazy { AutomationRunner(engine, automationRepository, runRepository, logger) }
     val alarmScheduler by lazy { AlarmScheduler(appContext, automationRepository, settingsRepository, logger, clock) }
+    val locationAccess = LocationAccess(appContext)
+    val geofenceSync by lazy { GeofenceSync(appContext, automationRepository, locationAccess, logger) }
     val deviceWatcher by lazy { DeviceWatcher(appContext, automationRepository, settingsRepository, logger) { automationRunner } }
 
     /**
@@ -53,6 +57,7 @@ class AppContainer(context: Context) {
     suspend fun refreshTriggers(reason: String) {
         alarmScheduler.reschedule(reason)
         deviceWatcher.sync(reason)
+        geofenceSync.sync(reason)
     }
 
     val updateNotifier = UpdateNotifier(appContext)

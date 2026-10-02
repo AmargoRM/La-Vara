@@ -42,6 +42,32 @@ sealed interface Trigger {
         val event: PowerEvent = PowerEvent.CONNECTED,
     ) : Trigger
 
+    /**
+     * Al entrar o al salir de una zona: un círculo de [radiusMeters] metros alrededor de [latitude], [longitude].
+     * [placeName] es solo para mostrar ("Casa"). Necesita el permiso de ubicación "Permitir todo el tiempo".
+     */
+    @Serializable
+    @SerialName("location")
+    data class Location(
+        val latitude: Double,
+        val longitude: Double,
+        val radiusMeters: Int = 200,
+        val transition: LocationTransition = LocationTransition.ENTER,
+        val placeName: String = "",
+    ) : Trigger {
+        init {
+            require(latitude in -90.0..90.0) { "latitude debe estar entre -90 y 90, no $latitude" }
+            require(longitude in -180.0..180.0) { "longitude debe estar entre -180 y 180, no $longitude" }
+            require(radiusMeters in MIN_RADIUS..MAX_RADIUS) { "radiusMeters debe estar entre $MIN_RADIUS y $MAX_RADIUS, no $radiusMeters" }
+        }
+
+        companion object {
+            /** Android recomienda al menos 100 m: con menos, la ubicación no es lo bastante precisa. */
+            const val MIN_RADIUS = 100
+            const val MAX_RADIUS = 50_000
+        }
+    }
+
     /** Solo se ejecuta a mano (botón, atajo u otra automatización). */
     @Serializable
     @SerialName("manual")
@@ -55,6 +81,15 @@ enum class BatteryDirection {
 
     /** La batería sube hasta el umbral o más. */
     @SerialName("above") ABOVE,
+}
+
+@Serializable
+enum class LocationTransition {
+    /** Al llegar a la zona. */
+    @SerialName("enter") ENTER,
+
+    /** Al irse de la zona. */
+    @SerialName("exit") EXIT,
 }
 
 @Serializable

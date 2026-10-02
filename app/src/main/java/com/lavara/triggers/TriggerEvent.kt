@@ -29,6 +29,14 @@ sealed interface TriggerEvent {
         override val dedupKey: String = "power:${if (connected) "connected" else "disconnected"}:$atMillis"
     }
 
+    /**
+     * El teléfono entró ([entered] = true) o salió de la zona de la automatización [automationId].
+     * Cada zona es de una sola automatización, por eso el evento ya dice a cuál le corresponde.
+     */
+    data class LocationChanged(val automationId: String, val entered: Boolean, val atMillis: Long) : TriggerEvent {
+        override val dedupKey: String = "location:$automationId:${if (entered) "enter" else "exit"}:$atMillis"
+    }
+
     /** El usuario pidió ejecutar [automationId] a mano. [requestId] distingue cada pedido. */
     data class ManualRun(val automationId: String, val requestId: String) : TriggerEvent {
         override val dedupKey: String = "manual:$requestId"
@@ -47,6 +55,9 @@ object TriggerMatcher {
 
         is Trigger.Power -> event is TriggerEvent.PowerChanged &&
             event.connected == (trigger.event == PowerEvent.CONNECTED)
+
+        is Trigger.Location -> event is TriggerEvent.LocationChanged && event.automationId == automationId &&
+            event.entered == (trigger.transition == LocationTransition.ENTER)
 
         Trigger.Manual -> false
     } || (event is TriggerEvent.ManualRun && event.automationId == automationId)

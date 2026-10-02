@@ -46,6 +46,7 @@ class AutomationRunner(
         is TriggerEvent.TimeReached -> "hora %02d:%02d".format(event.at.hour, event.at.minute)
         is TriggerEvent.BatteryChanged -> "batería ${event.previousLevel ?: "?"} % → ${event.level} %"
         is TriggerEvent.PowerChanged -> if (event.connected) "cargador conectado" else "cargador desconectado"
+        is TriggerEvent.LocationChanged -> (if (event.entered) "entrada a la zona de " else "salida de la zona de ") + event.automationId
         is TriggerEvent.ManualRun -> "ejecución manual de ${event.automationId}"
     }
 
