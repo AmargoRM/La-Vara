@@ -40,30 +40,41 @@ jobs:
           path: app/build/reports/tests/
           retention-days: 7
 
-      # ---------- Solo en main: firmar y publicar el APK en el Release "ultima" ----------
+      # ---------- Firma: en main firma y publica el APK en el Release "ultima" ----------
 
-      - name: Revisar si existe la llave de firma
+      # Fuera de main se ensaya todo el camino de firma con una llave desechable,
+      # para detectar errores antes de que lleguen a main. Ese APK no se publica.
+      - name: Preparar llave de firma
         id: llave
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request'
         env:
           KEYSTORE_B64: ${{ secrets.LAVARA_KEYSTORE_B64 }}
           KEYSTORE_PASSWORD: ${{ secrets.LAVARA_KEYSTORE_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            ENSAYO_PASS=$(openssl rand -hex 16)
+            keytool -genkeypair -keystore "$RUNNER_TEMP/lavara.p12" -storetype PKCS12 \
+              -storepass "$ENSAYO_PASS" -keypass "$ENSAYO_PASS" -alias lavara \
+              -keyalg RSA -keysize 2048 -validity 1 -dname "CN=Ensayo" > /dev/null 2>&1
+            echo "LAVARA_KEYSTORE_PASSWORD=$ENSAYO_PASS" >> "$GITHUB_ENV"
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+            echo "publicar=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
             echo "::warning::No hay llave de firma en GitHub Secrets. No se publica APK. Corré el workflow 'Crear llave de firma' y cargá los dos secretos."
             echo "## ⚠️ No se publicó el APK" >> "$GITHUB_STEP_SUMMARY"
             echo "Falta la llave de firma. Seguí los pasos del PR de S0 para crearla y cargar los secretos." >> "$GITHUB_STEP_SUMMARY"
             echo "existe=false" >> "$GITHUB_OUTPUT"
           else
             echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lavara.p12"
+            echo "LAVARA_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
             echo "existe=true" >> "$GITHUB_OUTPUT"
+            echo "publicar=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Compilar APK firmado
         if: steps.llave.outputs.existe == 'true'
         env:
           LAVARA_KEYSTORE_FILE: ${{ runner.temp }}/lavara.p12
-          LAVARA_KEYSTORE_PASSWORD: ${{ secrets.LAVARA_KEYSTORE_PASSWORD }}
         run: ./gradlew assembleRelease --stacktrace
 
       - name: Verificar firma
@@ -81,7 +92,7 @@ jobs:
           HUELLA=$(grep -m1 'SHA-256 digest' firma.txt | sed 's/.*: //' | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
           cp "$APK" La-Vara.apk
           {
-            echo "## ✅ APK publicado"
+            echo "## ✅ APK firmado"
             echo "Versión 0.1.${LAVARA_VERSION_CODE} (compilación ${LAVARA_VERSION_CODE})"
             echo ""
             echo "Huella de la llave (SHA-256): \`$HUELLA\`"
@@ -89,7 +100,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publicar en el Release "ultima"
-        if: steps.llave.outputs.existe == 'true'
+        if: steps.llave.outputs.publicar == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
