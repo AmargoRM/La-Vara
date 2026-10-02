@@ -12,13 +12,13 @@ Crear "Prueba Vara": CUANDO 08:00, SI batería > 20 %, HACER mostrar notificaci�
 Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora. Al abrir La Vara, el historial muestra la ejecución con su detalle.
 
 ### S0 — Esqueleto, CI y firma
-- [ ] Proyecto Android vacío (`com.lavara`) con Compose, tema con color principal `#0F7C73`, modo claro/oscuro del sistema y una pantalla "LA VARA".
-- [ ] `gradle/libs.versions.toml` con versiones estables actuales.
-- [ ] `.gitignore` correcto (keystores, `local.properties`, build).
-- [ ] Workflow `.github/workflows/build.yml`: en cada push y PR compila, corre tests unitarios y, en `main`, firma el APK release y lo publica en un GitHub Release (sobrescribiendo uno llamado `ultima`), para que el usuario lo descargue directo desde el navegador del teléfono.
-- [ ] `versionCode` = número de ejecución de Actions, para que cada APK se instale como actualización.
-- [ ] Firma con llave fija leída de GitHub Secrets. El usuario no usa terminal ni Java: diseñar el método más simple para crear la llave una sola vez (por ejemplo, un workflow manual que la genera y la entrega como artifact descargable), y guiarlo paso a paso para guardar la copia de respaldo y cargar los secretos. Explicar despacio por qué perder o cambiar la llave obliga a desinstalar y borra los datos.
-- [ ] `docs/FORMATO_JSON.md` creado (vacío con estructura), `docs/LIMITES_ANDROID.md` revisado.
+- [x] Proyecto Android vacío (`com.lavara`) con Compose, tema con color principal `#0F7C73`, modo claro/oscuro del sistema y una pantalla "LA VARA".
+- [x] `gradle/libs.versions.toml` con versiones estables actuales.
+- [x] `.gitignore` correcto (keystores, `local.properties`, build).
+- [x] Workflow `.github/workflows/build.yml`: en cada push y PR compila, corre tests unitarios y, en `main`, firma el APK release y lo publica en un GitHub Release (sobrescribiendo uno llamado `ultima`), para que el usuario lo descargue directo desde el navegador del teléfono.
+- [x] `versionCode` = número de ejecución de Actions, para que cada APK se instale como actualización.
+- [x] Firma con llave fija leída de GitHub Secrets. El usuario no usa terminal ni Java: diseñar el método más simple para crear la llave una sola vez (por ejemplo, un workflow manual que la genera y la entrega como artifact descargable), y guiarlo paso a paso para guardar la copia de respaldo y cargar los secretos. Explicar despacio por qué perder o cambiar la llave obliga a desinstalar y borra los datos.
+- [x] `docs/FORMATO_JSON.md` creado (vacío con estructura), `docs/LIMITES_ANDROID.md` revisado.
 - **Prueba en el teléfono:** descargar `ultima`, instalar, abrir, ver "LA VARA". Hacer un segundo push trivial, instalar encima sin desinstalar.
 
 ### S1 — Modelo y motor (Kotlin puro)
