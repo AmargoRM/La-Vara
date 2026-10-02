@@ -133,11 +133,13 @@ fun EditorScreen(container: AppContainer, automationId: String?, onClose: () -> 
                     fontWeight = FontWeight.Bold,
                 )
             }
-            if (step == 0) {
+            // El nombre se ve en el paso 1 y, si sigue vacío, también en el 3, para poder guardar sin volver.
+            if (step == 0 || (step == 2 && current.name.isBlank())) {
                 OutlinedTextField(
                     value = current.name,
                     onValueChange = { draft = current.copy(name = it) },
-                    label = { Text("Nombre") },
+                    label = { Text("Nombre de la automatización") },
+                    isError = step == 2,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 )
@@ -570,7 +572,7 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Si una acción falla", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Choice("Seguir con la próxima", draft.onError == OnError.CONTINUE, Modifier.weight(1f)) { onChange(draft.copy(onError = OnError.CONTINUE)) }
+                Choice("Seguir", draft.onError == OnError.CONTINUE, Modifier.weight(1f)) { onChange(draft.copy(onError = OnError.CONTINUE)) }
                 Choice("Detener todo", draft.onError == OnError.STOP, Modifier.weight(1f)) { onChange(draft.copy(onError = OnError.STOP)) }
             }
         }

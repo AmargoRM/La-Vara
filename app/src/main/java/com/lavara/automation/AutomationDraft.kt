@@ -23,7 +23,7 @@ data class AutomationDraft(
 ) {
     /** Lo que impide guardar, en palabras para el usuario. Lista vacía = se puede guardar. */
     fun problems(): List<String> = buildList {
-        if (name.isBlank()) add("Falta el nombre.")
+        if (name.isBlank()) add("Falta el nombre de la automatización (arriba).")
         if (actions.isEmpty()) add("Falta al menos una acción en el paso 3.")
         actions.forEachIndexed { i, action ->
             when (action) {
