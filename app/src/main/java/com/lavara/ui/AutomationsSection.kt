@@ -2,6 +2,8 @@ package com.lavara.ui
 
 import android.Manifest
 import android.app.TimePickerDialog
+import android.content.Context
+import android.text.format.DateFormat
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,11 +32,14 @@ import androidx.compose.ui.unit.dp
 import com.lavara.automation.Automation
 import com.lavara.core.AppContainer
 import com.lavara.core.TimeText
-import com.lavara.system.alarm.AlarmScheduler
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.TriggerEvent
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalTime
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Calendar
 import java.util.UUID
 
 /**
@@ -83,7 +88,7 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
 
         Text("Automatizaciones", style = MaterialTheme.typography.titleMedium)
         Text(
-            nextAlarm?.let { "Próxima alarma: ${AlarmScheduler.format(Instant.ofEpochMilli(it).atZone(container.clock.now().zone))}" }
+            nextAlarm?.let { "Próxima alarma: ${whenText(context, Instant.ofEpochMilli(it).atZone(container.clock.now().zone), container.clock.now())}" }
                 ?: "No hay alarmas programadas.",
             style = MaterialTheme.typography.bodyMedium,
         )
@@ -102,7 +107,8 @@ fun AutomationsSection(container: AppContainer, resumeCount: Int) {
                     TimePickerDialog(context, { _, hour, minute ->
                         val time = "%02d:%02d".format(hour, minute)
                         save(automation.copy(trigger = trigger.copy(time = time)), "hora cambiada a $time")
-                    }, current.hour, current.minute, true).show()
+                    // Mismo formato que el reloj del teléfono: con a. m./p. m. si el teléfono usa 12 horas.
+                    }, current.hour, current.minute, DateFormat.is24HourFormat(context)).show()
                 },
                 onRunNow = {
                     scope.launch {
@@ -158,7 +164,7 @@ private fun AutomationCard(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(automation.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(describe(automation.trigger), style = MaterialTheme.typography.bodyMedium)
+                    Text(describe(context, automation.trigger), style = MaterialTheme.typography.bodyMedium)
                 }
                 Switch(checked = automation.enabled, onCheckedChange = onToggle)
             }
@@ -174,10 +180,30 @@ private fun AutomationCard(
     }
 }
 
-private fun describe(trigger: Trigger): String = when (trigger) {
-    is Trigger.Time -> "Cada " + (if (trigger.days.isEmpty()) "día" else trigger.days.joinToString(", ") { dayName(it.isoNumber) }) + " a las ${trigger.time}"
+private fun describe(context: Context, trigger: Trigger): String = when (trigger) {
+    is Trigger.Time -> "Cada " + (if (trigger.days.isEmpty()) "día" else trigger.days.joinToString(", ") { dayName(it.isoNumber) }) +
+        " a las ${timeText(context, TimeText.parseOrNull(trigger.time)!!)}"
     is Trigger.Battery -> "Cuando la batería ${if (trigger.direction.name == "BELOW") "baja a" else "sube a"} ${trigger.threshold} %"
     Trigger.Manual -> "Solo a mano"
+}
+
+/** Hora como la muestra el reloj del teléfono: "4:30 p. m." o "16:30". */
+private fun timeText(context: Context, time: LocalTime): String {
+    val calendar = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, time.hour)
+        set(Calendar.MINUTE, time.minute)
+    }
+    return DateFormat.getTimeFormat(context).format(calendar.time)
+}
+
+/** "hoy a las 4:30 p. m.", "mañana a las 3:48 a. m." o "05/10 a las 8:00 a. m.". */
+private fun whenText(context: Context, at: ZonedDateTime, now: ZonedDateTime): String {
+    val day = when (at.toLocalDate()) {
+        now.toLocalDate() -> "hoy"
+        now.toLocalDate().plusDays(1) -> "mañana"
+        else -> at.format(DateTimeFormatter.ofPattern("dd/MM"))
+    }
+    return "$day a las ${timeText(context, at.toLocalTime())}"
 }
 
 private fun dayName(iso: Int) = listOf("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")[iso - 1]
