@@ -59,7 +59,7 @@ class DeviceWatcher(
      * Llega una lectura de batería. Solo pasa al motor si cruza el umbral de alguna automatización:
      * el porcentaje cambia unas cien veces por día y llenaría los registros.
      */
-    suspend fun onBatteryLevel(level: Int) = mutex.withLock {
+    suspend fun onBatteryLevel(level: Int): Unit = mutex.withLock {
         val previous = settings.get(KEY_LAST_LEVEL)?.toIntOrNull()
         if (previous == level) return@withLock
         settings.set(KEY_LAST_LEVEL, level.toString())
@@ -70,6 +70,7 @@ class DeviceWatcher(
         val all = automations.all()
         val crosses = all.any { it.enabled && it.trigger is Trigger.Battery && TriggerMatcher.matches(it.trigger, it.id, event) }
         if (crosses) runner().handle(event)
+        Unit
     }
 
     suspend fun onPower(connected: Boolean, atMillis: Long) {
