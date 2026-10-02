@@ -45,6 +45,7 @@ class AutomationRunner(
     private fun describe(event: TriggerEvent): String = when (event) {
         is TriggerEvent.TimeReached -> "hora %02d:%02d".format(event.at.hour, event.at.minute)
         is TriggerEvent.BatteryChanged -> "batería ${event.previousLevel ?: "?"} % → ${event.level} %"
+        is TriggerEvent.PowerChanged -> if (event.connected) "cargador conectado" else "cargador desconectado"
         is TriggerEvent.ManualRun -> "ejecución manual de ${event.automationId}"
     }
 

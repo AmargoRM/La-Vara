@@ -35,6 +35,13 @@ sealed interface Trigger {
         }
     }
 
+    /** Cuando se conecta o se desconecta el cargador (cable o base inalámbrica). */
+    @Serializable
+    @SerialName("power")
+    data class Power(
+        val event: PowerEvent = PowerEvent.CONNECTED,
+    ) : Trigger
+
     /** Solo se ejecuta a mano (botón, atajo u otra automatización). */
     @Serializable
     @SerialName("manual")
@@ -48,6 +55,15 @@ enum class BatteryDirection {
 
     /** La batería sube hasta el umbral o más. */
     @SerialName("above") ABOVE,
+}
+
+@Serializable
+enum class PowerEvent {
+    /** Se enchufa el cargador. */
+    @SerialName("connected") CONNECTED,
+
+    /** Se desenchufa el cargador. */
+    @SerialName("disconnected") DISCONNECTED,
 }
 
 @Serializable

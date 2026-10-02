@@ -57,6 +57,17 @@ Al escribir una automatización a mano, alcanza con `id`, `name`, `trigger` y `a
 - `threshold` (obligatorio): porcentaje de 0 a 100.
 - `direction` (obligatorio): `"below"` = cuando baja hasta el umbral o menos; `"above"` = cuando sube hasta el umbral o más.
 - Se dispara **una vez al cruzar** el umbral, no en cada cambio mientras la batería sigue del mismo lado.
+- Si al activarla la batería ya está del otro lado del umbral, no se dispara hasta el próximo cruce.
+- Mientras haya una automatización activa con `battery` o `power`, el teléfono muestra la notificación fija "La Vara está activa" (exigencia de Android, ver `LIMITES_ANDROID.md`).
+
+### `power`: se conecta o desconecta el cargador
+
+```json
+{ "type": "power", "event": "connected" }
+```
+
+- `event` (opcional, por defecto `"connected"`): `"connected"` = al enchufar el cargador (cable o base inalámbrica); `"disconnected"` = al desenchufarlo.
+- Se dispara una vez por cada conexión o desconexión.
 
 ### `manual`: solo a mano
 

@@ -4,6 +4,7 @@ import com.lavara.actions.Action
 import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
 import com.lavara.triggers.BatteryDirection
+import com.lavara.triggers.PowerEvent
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.Weekday
 import kotlinx.serialization.SerializationException
@@ -26,6 +27,17 @@ class AutomationJsonTest {
         roundTrip(base(Trigger.Time("08:00", listOf(Weekday.MONDAY, Weekday.FRIDAY))))
         roundTrip(base(Trigger.Battery(20, BatteryDirection.BELOW)))
         roundTrip(base(Trigger.Manual))
+        roundTrip(base(Trigger.Power(PowerEvent.CONNECTED)))
+        roundTrip(base(Trigger.Power(PowerEvent.DISCONNECTED)))
+    }
+
+    @Test
+    fun cargador_nombresEstablesYValorPorDefecto() {
+        val text = AutomationJson.encode(base(Trigger.Power(PowerEvent.DISCONNECTED))).filterNot { it.isWhitespace() }
+        assertTrue(text, text.contains("\"type\":\"power\""))
+        assertTrue(text, text.contains("\"event\":\"disconnected\""))
+        val sinEvento = AutomationJson.decode("""{"id":"a","name":"A","trigger":{"type":"power"}}""")
+        assertEquals(Trigger.Power(PowerEvent.CONNECTED), sinEvento.trigger)
     }
 
     @Test

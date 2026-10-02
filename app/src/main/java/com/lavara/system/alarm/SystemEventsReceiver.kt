@@ -25,7 +25,7 @@ class SystemEventsReceiver : BroadcastReceiver() {
         container.appScope.launch {
             try {
                 container.logger.info("Sistema", "Evento del sistema: $reason")
-                container.alarmScheduler.reschedule(reason)
+                container.refreshTriggers(reason)
             } finally {
                 pending.finish()
             }

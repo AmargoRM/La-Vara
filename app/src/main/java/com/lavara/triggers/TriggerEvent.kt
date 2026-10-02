@@ -1,5 +1,6 @@
 package com.lavara.triggers
 
+import com.lavara.automation.Automation
 import com.lavara.core.TimeText
 import java.time.ZonedDateTime
 
@@ -20,6 +21,14 @@ sealed interface TriggerEvent {
         override val dedupKey: String = "battery:$previousLevel->$level"
     }
 
+    /**
+     * Se conectó ([connected] = true) o se desconectó el cargador. [atMillis] es la hora del aviso de
+     * Android: distingue una conexión de la siguiente.
+     */
+    data class PowerChanged(val connected: Boolean, val atMillis: Long) : TriggerEvent {
+        override val dedupKey: String = "power:${if (connected) "connected" else "disconnected"}:$atMillis"
+    }
+
     /** El usuario pidió ejecutar [automationId] a mano. [requestId] distingue cada pedido. */
     data class ManualRun(val automationId: String, val requestId: String) : TriggerEvent {
         override val dedupKey: String = "manual:$requestId"
@@ -36,6 +45,9 @@ object TriggerMatcher {
 
         is Trigger.Battery -> event is TriggerEvent.BatteryChanged && crosses(trigger, event)
 
+        is Trigger.Power -> event is TriggerEvent.PowerChanged &&
+            event.connected == (trigger.event == PowerEvent.CONNECTED)
+
         Trigger.Manual -> false
     } || (event is TriggerEvent.ManualRun && event.automationId == automationId)
 
@@ -47,6 +59,10 @@ object TriggerMatcher {
             BatteryDirection.ABOVE -> event.level >= trigger.threshold && (prev == null || prev < trigger.threshold)
         }
     }
+
+    /** true si alguna automatización activa necesita que La Vara escuche la batería o el cargador. */
+    fun needsDeviceWatch(automations: List<Automation>): Boolean =
+        automations.any { it.enabled && (it.trigger is Trigger.Battery || it.trigger is Trigger.Power) }
 
     private fun Trigger.Time.timeOfDay() = TimeText.parseOrNull(time)!!
 }
