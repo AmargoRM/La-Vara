@@ -60,9 +60,9 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - **Prueba en el teléfono:** el criterio de éxito del MVP completo, con la hora puesta 3 minutos adelante.
 
 ### S4 — Editor y control
-- [ ] Dashboard: estado del motor, cantidad de automatizaciones y activas, última ejecución, último evento, errores recientes, lista con interruptor activar/desactivar.
-- [ ] Editor en tres pasos: ¿CUÁNDO? → ¿SI? → ¿HACER QUÉ?, con reordenar acciones. Formularios simples, sin construcción visual por arrastre todavía.
-- [ ] Ejecutar manualmente, duplicar, eliminar (con confirmación).
+- [x] Dashboard: estado del motor, cantidad de automatizaciones y activas, última ejecución, último evento, errores recientes, lista con interruptor activar/desactivar.
+- [x] Editor en tres pasos: ¿CUÁNDO? → ¿SI? → ¿HACER QUÉ?, con reordenar acciones. Formularios simples, sin construcción visual por arrastre todavía.
+- [x] Ejecutar manualmente, duplicar, eliminar (con confirmación).
 - **Prueba en el teléfono:** crear desde cero "Prueba Vara" con el editor y repetir el criterio de éxito.
 
 ### S5 — Cierre del MVP
