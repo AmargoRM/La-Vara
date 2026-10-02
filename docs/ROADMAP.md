@@ -31,12 +31,12 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - **Prueba en el teléfono:** instalar a mano la primera versión con esta función, pegar el token, publicar otra versión y actualizar desde la notificación.
 
 ### S1 — Modelo y motor (Kotlin puro)
-- [ ] `Automation` (id, name, description, enabled, priority, trigger, conditions, actions, onError, cooldownSeconds, createdAt, updatedAt, lastExecutedAt, executionCount, failureCount).
-- [ ] `Trigger`, `Condition`, `Action` como sealed interfaces serializables. Tipos iniciales: `Time` (hora + días de semana), `Battery` (umbral, arriba/abajo), `Manual`; condiciones `BatteryLevel`, `TimeBetween`, `And`, `Or`, `Not`; acciones `ShowNotification`, `OpenApp`, `Delay`.
-- [ ] `AutomationEngine`: recibe `TriggerEvent`, filtra activas y compatibles, evalúa condiciones, ejecuta acciones en secuencia sin bloquear, aplica cooldown y deduplicación, devuelve `ExecutionResult` (success, timestamp, automationId, duration, executedActions, failedAction, errorMessage).
-- [ ] Variables básicas de solo lectura en el contexto: `%battery`, `%time`, `%date`.
-- [ ] `docs/FORMATO_JSON.md` completo con un ejemplo por tipo. Este documento debe permitir que otra IA escriba automatizaciones válidas sin ver el código.
-- [ ] Tests: condiciones anidadas, cooldown, deduplicación, ida y vuelta JSON de cada tipo, falla de acción con CONTINUE y STOP.
+- [x] `Automation` (id, name, description, enabled, priority, trigger, conditions, actions, onError, cooldownSeconds, createdAt, updatedAt, lastExecutedAt, executionCount, failureCount).
+- [x] `Trigger`, `Condition`, `Action` como sealed interfaces serializables. Tipos iniciales: `Time` (hora + días de semana), `Battery` (umbral, arriba/abajo), `Manual`; condiciones `BatteryLevel`, `TimeBetween`, `And`, `Or`, `Not`; acciones `ShowNotification`, `OpenApp`, `Delay` y `RunAutomation` (adelantada para cumplir la detección de ciclos que CLAUDE.md pide desde el inicio).
+- [x] `AutomationEngine`: recibe `TriggerEvent`, filtra activas y compatibles, evalúa condiciones, ejecuta acciones en secuencia sin bloquear, aplica cooldown y deduplicación, devuelve `ExecutionResult` (success, timestamp, automationId, duration, executedActions, failedAction, errorMessage).
+- [x] Variables básicas de solo lectura en el contexto: `%battery`, `%time`, `%date`.
+- [x] `docs/FORMATO_JSON.md` completo con un ejemplo por tipo. Este documento debe permitir que otra IA escriba automatizaciones válidas sin ver el código.
+- [x] Tests: condiciones anidadas, cooldown, deduplicación, ida y vuelta JSON de cada tipo, falla de acción con CONTINUE y STOP.
 - **Prueba en el teléfono:** ninguna visible; solo CI en verde.
 
 ### S2 — Persistencia, logs e historial
