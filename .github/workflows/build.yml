@@ -1,0 +1,101 @@
+name: Compilar
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: compilar-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: write
+
+jobs:
+  compilar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # Cada ejecución tiene un número mayor: así cada APK se instala como actualización.
+      LAVARA_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Compilar y correr tests
+        run: ./gradlew assembleDebug testDebugUnitTest --stacktrace
+
+      - name: Guardar reporte de tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reporte-tests
+          path: app/build/reports/tests/
+          retention-days: 7
+
+      # ---------- Solo en main: firmar y publicar el APK en el Release "ultima" ----------
+
+      - name: Revisar si existe la llave de firma
+        id: llave
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          KEYSTORE_B64: ${{ secrets.LAVARA_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.LAVARA_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::warning::No hay llave de firma en GitHub Secrets. No se publica APK. Corré el workflow 'Crear llave de firma' y cargá los dos secretos."
+            echo "## ⚠️ No se publicó el APK" >> "$GITHUB_STEP_SUMMARY"
+            echo "Falta la llave de firma. Seguí los pasos del PR de S0 para crearla y cargar los secretos." >> "$GITHUB_STEP_SUMMARY"
+            echo "existe=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/lavara.p12"
+            echo "existe=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compilar APK firmado
+        if: steps.llave.outputs.existe == 'true'
+        env:
+          LAVARA_KEYSTORE_FILE: ${{ runner.temp }}/lavara.p12
+          LAVARA_KEYSTORE_PASSWORD: ${{ secrets.LAVARA_KEYSTORE_PASSWORD }}
+        run: ./gradlew assembleRelease --stacktrace
+
+      - name: Verificar firma
+        if: steps.llave.outputs.existe == 'true'
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          if [ ! -f "$APK" ]; then
+            echo "::error::No salió un APK firmado. Revisá que los secretos LAVARA_KEYSTORE_B64 y LAVARA_KEYSTORE_PASSWORD sean los del archivo de la llave."
+            ls -R app/build/outputs/apk/release || true
+            exit 1
+          fi
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          "$APKSIGNER" verify --print-certs "$APK" | tee firma.txt
+          # Mismo formato que muestra 0_LEEME.txt de la llave (AB:CD:...)
+          HUELLA=$(grep -m1 'SHA-256 digest' firma.txt | sed 's/.*: //' | tr 'a-f' 'A-F' | sed 's/../&:/g; s/:$//')
+          cp "$APK" La-Vara.apk
+          {
+            echo "## ✅ APK publicado"
+            echo "Versión 0.1.${LAVARA_VERSION_CODE} (compilación ${LAVARA_VERSION_CODE})"
+            echo ""
+            echo "Huella de la llave (SHA-256): \`$HUELLA\`"
+            echo "Debe ser idéntica en todas las versiones. Si cambia, el teléfono no aceptará la actualización."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publicar en el Release "ultima"
+        if: steps.llave.outputs.existe == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete ultima --yes --cleanup-tag || true
+          gh release create ultima La-Vara.apk \
+            --target "$GITHUB_SHA" \
+            --title "La Vara 0.1.${LAVARA_VERSION_CODE}" \
+            --notes "Última versión de La Vara. Compilación ${LAVARA_VERSION_CODE}, commit ${GITHUB_SHA::7}. Descargá La-Vara.apk desde el teléfono e instalalo encima de la versión anterior." \
+            --latest

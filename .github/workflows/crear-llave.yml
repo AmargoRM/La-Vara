@@ -1,0 +1,85 @@
+name: Crear llave de firma (una sola vez)
+
+# Se ejecuta a mano desde la pestaña Actions. Genera la llave con la que se firma
+# cada APK de La Vara y la entrega como archivo descargable (artifact) por 1 día.
+# La llave nunca se guarda en el repositorio.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar:
+        description: "Escribí CREAR (en mayúsculas) para confirmar"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  crear:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Negarse si ya hay una llave cargada
+        env:
+          YA_EXISTE: ${{ secrets.LAVARA_KEYSTORE_B64 != '' }}
+          CONFIRMAR: ${{ inputs.confirmar }}
+        run: |
+          if [ "$YA_EXISTE" = "true" ]; then
+            echo "::error::Ya existe una llave en GitHub Secrets. Crear otra obligaría a desinstalar La Vara y perder sus datos. Si de verdad querés reemplazarla, primero borrá el secreto LAVARA_KEYSTORE_B64 a mano."
+            exit 1
+          fi
+          if [ "$CONFIRMAR" != "CREAR" ]; then
+            echo "::error::Para confirmar hay que escribir CREAR en mayúsculas."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Generar llave
+        run: |
+          set -euo pipefail
+          PASS=$(openssl rand -hex 16)
+          echo "::add-mask::$PASS"
+          mkdir -p salida
+          keytool -genkeypair -v \
+            -keystore salida/LA_VARA_LLAVE_RESPALDO.p12 -storetype PKCS12 \
+            -storepass "$PASS" -keypass "$PASS" \
+            -alias lavara -keyalg RSA -keysize 4096 -validity 36500 \
+            -dname "CN=La Vara, O=La Vara (uso personal)" > /dev/null 2>&1
+          base64 -w0 salida/LA_VARA_LLAVE_RESPALDO.p12 > salida/1_LAVARA_KEYSTORE_B64.txt
+          printf '%s' "$PASS" > salida/2_LAVARA_KEYSTORE_PASSWORD.txt
+          HUELLA=$(keytool -list -v -keystore salida/LA_VARA_LLAVE_RESPALDO.p12 -storetype PKCS12 -storepass "$PASS" -alias lavara | sed -n 's/.*SHA256: //p' | head -n1)
+          cat > salida/0_LEEME.txt <<TXT
+          LLAVE DE FIRMA DE LA VARA — GUARDAR PARA SIEMPRE
+
+          Este paquete contiene:
+            LA_VARA_LLAVE_RESPALDO.p12      la llave (copia de respaldo)
+            1_LAVARA_KEYSTORE_B64.txt       la misma llave, escrita como texto, para pegar en GitHub
+            2_LAVARA_KEYSTORE_PASSWORD.txt  la contraseña de la llave
+
+          Pasos:
+            1. Guardá este paquete completo en dos lugares privados (por ejemplo, Google Drive
+               personal y una memoria USB). No lo compartas con nadie.
+            2. En GitHub: Settings > Secrets and variables > Actions > New repository secret.
+               Nombre LAVARA_KEYSTORE_B64        -> pegar TODO el contenido de 1_LAVARA_KEYSTORE_B64.txt
+               Nombre LAVARA_KEYSTORE_PASSWORD   -> pegar TODO el contenido de 2_LAVARA_KEYSTORE_PASSWORD.txt
+            3. Borrá el artifact en GitHub (Actions > esta ejecución > Artifacts > ícono de basurero).
+
+          Huella SHA-256 de la llave (para comparar con el resumen de cada compilación):
+            $HUELLA
+
+          Si esta llave se pierde o se cambia, el teléfono no acepta actualizaciones de La Vara:
+          hay que desinstalarla y se pierden todas sus automatizaciones e historial.
+          TXT
+          echo "## 🔑 Llave creada" >> "$GITHUB_STEP_SUMMARY"
+          echo "Descargá el artifact **llave-la-vara** de esta página (dura 1 día) y seguí 0_LEEME.txt." >> "$GITHUB_STEP_SUMMARY"
+          echo "Huella SHA-256: \`$HUELLA\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: llave-la-vara
+          path: salida/
+          retention-days: 1
+          if-no-files-found: error
