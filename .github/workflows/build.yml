@@ -38,8 +38,9 @@ jobs:
         run: |
           if [ -n "$(git status --porcelain app/schemas)" ]; then
             git status --porcelain app/schemas
-            # También se imprime acá, para poder copiarlo desde el log si no se puede bajar el artifact.
-            git ls-files --others --modified app/schemas | while read -r f; do echo "----- $f"; cat "$f"; echo; echo "----- fin"; done
+            # También se imprime comprimido en una línea, para copiarlo desde el log si no se puede bajar el artifact
+            # (se recupera con: echo "<texto>" | base64 -d | tar xz).
+            echo "ESQUEMA_TGZ_BASE64=$(git ls-files --others --modified app/schemas | tar czf - -T - | base64 -w0)"
             echo "::error::El esquema de la base de datos cambió y no está en el repo. Descargá el artifact 'esquema-room', subí app/schemas y escribí la Migration."
             exit 1
           fi

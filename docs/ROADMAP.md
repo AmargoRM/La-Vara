@@ -40,12 +40,12 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - **Prueba en el teléfono:** ninguna visible; solo CI en verde.
 
 ### S2 — Persistencia, logs e historial
-- [ ] Room: tablas `automations` (columnas de resumen + `definition` JSON), `automation_runs`, `logs`, `settings`. Esquema exportado al repo.
-- [ ] Repositorios y `AppContainer`.
-- [ ] Logger estructurado (nivel, hora, origen, mensaje, automationId opcional).
-- [ ] Pantalla **Historial**: lista de ejecuciones y de logs, con filtro por automatización y nivel.
-- [ ] Botón **Exportar logs**: genera un texto y abre el menú Compartir de Android (para pegárselo a Claude).
-- [ ] Tests Room con Robolectric.
+- [x] Room: tablas `automations` (columnas de resumen + `definition` JSON), `automation_runs`, `logs`, `settings`. Esquema exportado al repo.
+- [x] Repositorios y `AppContainer`.
+- [x] Logger estructurado (nivel, hora, origen, mensaje, automationId opcional).
+- [x] Pantalla **Historial**: lista de ejecuciones y de logs, con filtro por automatización y nivel.
+- [x] Botón **Exportar logs**: genera un texto y abre el menú Compartir de Android (para pegárselo a Claude).
+- [x] Tests Room con Robolectric.
 - **Prueba en el teléfono:** abrir Historial, ver el log "app iniciada", exportarlo por WhatsApp o correo.
 
 ### S3 — El corazón: trigger de hora exacta
