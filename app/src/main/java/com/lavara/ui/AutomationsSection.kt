@@ -24,6 +24,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -76,9 +77,12 @@ fun AutomationsSection(
         scope.launch {
             container.automationRepository.save(updated.copy(updatedAt = container.clock.now().toInstant().toEpochMilli()))
             container.logger.info("Automatizaciones", "${updated.name}: $what", updated.id)
-            container.alarmScheduler.reschedule("${updated.name}: $what")
+            container.refreshTriggers("${updated.name}: $what")
         }
     }
+
+    // Si Android no dejó encender la vigilancia de batería con La Vara cerrada, se enciende al abrirla.
+    LaunchedEffect(resumeCount) { container.deviceWatcher.sync("La Vara abierta") }
 
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Se vuelve a leer cada vez que la app vuelve al frente (por si el usuario cambió algo en Ajustes).
@@ -233,7 +237,7 @@ fun AutomationsSection(
                     scope.launch {
                         container.automationRepository.delete(automation.id)
                         container.logger.info("Automatizaciones", "${automation.name}: eliminada", automation.id)
-                        container.alarmScheduler.reschedule("${automation.name}: eliminada")
+                        container.refreshTriggers("${automation.name}: eliminada")
                         note = "Se eliminó \"${automation.name}\"."
                     }
                 }) { Text("Eliminar", color = MaterialTheme.colorScheme.error) }

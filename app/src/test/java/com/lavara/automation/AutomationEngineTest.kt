@@ -4,8 +4,10 @@ import com.lavara.actions.Action
 import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
 import com.lavara.triggers.BatteryDirection
+import com.lavara.triggers.PowerEvent
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.TriggerEvent
+import com.lavara.triggers.TriggerMatcher
 import com.lavara.triggers.Weekday
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -225,5 +227,38 @@ class AutomationEngineTest {
         assertEquals(1, engine.handle(TriggerEvent.BatteryChanged(level = 20, previousLevel = 21)).size)
         assertEquals(0, engine.handle(TriggerEvent.BatteryChanged(level = 19, previousLevel = 20)).size)
         assertEquals(0, engine.handle(TriggerEvent.BatteryChanged(level = 25, previousLevel = 19)).size)
+    }
+
+    @Test
+    fun cargador_conectarYDesconectarDisparanCadaUnoLoSuyo() = runBlocking {
+        val executor = RecordingExecutor()
+        val engine = engine(
+            ListSource(
+                listOf(
+                    automation("conectar", trigger = Trigger.Power(PowerEvent.CONNECTED)),
+                    automation("desconectar", trigger = Trigger.Power(PowerEvent.DISCONNECTED)),
+                    automation("bateria", trigger = Trigger.Battery(20, BatteryDirection.BELOW)),
+                ),
+            ),
+            executor,
+        )
+
+        assertEquals(listOf("conectar"), engine.handle(TriggerEvent.PowerChanged(connected = true, atMillis = 1)).map { it.automationId })
+        assertEquals(listOf("desconectar"), engine.handle(TriggerEvent.PowerChanged(connected = false, atMillis = 2)).map { it.automationId })
+        // Cada conexión es un evento distinto: la segunda también se ejecuta.
+        assertTrue(engine.handle(TriggerEvent.PowerChanged(connected = true, atMillis = 3)).single().success)
+        // El mismo aviso repetido no ejecuta dos veces.
+        assertEquals(
+            ExecutionStatus.SKIPPED_DUPLICATE,
+            engine.handle(TriggerEvent.PowerChanged(connected = true, atMillis = 3)).single().status,
+        )
+    }
+
+    @Test
+    fun vigilancia_soloHaceFaltaConBateriaOCargadorActivos() {
+        assertFalse(TriggerMatcher.needsDeviceWatch(listOf(automation("hora"))))
+        assertFalse(TriggerMatcher.needsDeviceWatch(listOf(automation("apagada", enabled = false, trigger = Trigger.Power()))))
+        assertTrue(TriggerMatcher.needsDeviceWatch(listOf(automation("hora"), automation("carga", trigger = Trigger.Power()))))
+        assertTrue(TriggerMatcher.needsDeviceWatch(listOf(automation("baja", trigger = Trigger.Battery(15, BatteryDirection.BELOW)))))
     }
 }

@@ -73,7 +73,9 @@ import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
 import com.lavara.core.AppContainer
 import com.lavara.core.TimeText
+import com.lavara.triggers.BatteryDirection
 import com.lavara.triggers.NextAlarm
+import com.lavara.triggers.PowerEvent
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.Weekday
 import com.lavara.ui.actionTitle
@@ -204,13 +206,14 @@ private suspend fun save(container: AppContainer, draft: AutomationDraft): Autom
     container.automationRepository.save(automation)
     val what = if (draft.original == null) "creada con el editor" else "editada"
     container.logger.info("Automatizaciones", "${automation.name}: $what", automation.id)
-    container.alarmScheduler.reschedule("${automation.name}: $what")
+    container.refreshTriggers("${automation.name}: $what")
     return automation
 }
 
 private fun savedMessage(context: Context, container: AppContainer, automation: Automation): String {
     val trigger = automation.trigger
     if (!automation.enabled) return "Guardada. Está desactivada: activala en Inicio."
+    if (trigger is Trigger.Battery || trigger is Trigger.Power) return "Guardada. La Vara queda atenta a la batería y al cargador."
     if (trigger !is Trigger.Time) return "Guardada."
     val now = container.clock.now()
     val at = NextAlarm.after(trigger, now)
@@ -264,8 +267,14 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
             if (trigger !is Trigger.Time) onChange(draft.copy(trigger = Trigger.Time(nextMinutes(container))))
         }
         Choice("Al tocarla", trigger == Trigger.Manual, Modifier.weight(1f)) { onChange(draft.copy(trigger = Trigger.Manual)) }
-        // La batería como disparador llega en la próxima versión; solo se muestra si ya estaba guardada así.
-        if (trigger is Trigger.Battery) Choice("Batería", true, Modifier.weight(1f)) {}
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Choice("Batería", trigger is Trigger.Battery, Modifier.weight(1f)) {
+            if (trigger !is Trigger.Battery) onChange(draft.copy(trigger = Trigger.Battery(20, BatteryDirection.BELOW)))
+        }
+        Choice("Cargador", trigger is Trigger.Power, Modifier.weight(1f)) {
+            if (trigger !is Trigger.Power) onChange(draft.copy(trigger = Trigger.Power(PowerEvent.CONNECTED)))
+        }
     }
 
     when (trigger) {
@@ -295,8 +304,47 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
             "No se dispara sola: corre cuando tocás \"Probar ahora\" en Inicio o cuando otra automatización la ejecuta.",
             style = MaterialTheme.typography.bodyMedium,
         )
-        is Trigger.Battery -> Text(
-            "${describe(context, trigger)}. Este disparador todavía no se activa solo: llega en la próxima versión.",
+        is Trigger.Battery -> Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Choice("Baja a", trigger.direction == BatteryDirection.BELOW, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(direction = BatteryDirection.BELOW)))
+                    }
+                    Choice("Sube a", trigger.direction == BatteryDirection.ABOVE, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(direction = BatteryDirection.ABOVE)))
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Slider(
+                        value = trigger.threshold.toFloat(),
+                        onValueChange = { onChange(draft.copy(trigger = trigger.copy(threshold = (it / 5).toInt() * 5))) },
+                        valueRange = 0f..100f,
+                        steps = 19,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("${trigger.threshold} %", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.width(64.dp), textAlign = TextAlign.End)
+                }
+            }
+        }
+        is Trigger.Power -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Choice("Al conectar", trigger.event == PowerEvent.CONNECTED, Modifier.weight(1f)) {
+                onChange(draft.copy(trigger = trigger.copy(event = PowerEvent.CONNECTED)))
+            }
+            Choice("Al desconectar", trigger.event == PowerEvent.DISCONNECTED, Modifier.weight(1f)) {
+                onChange(draft.copy(trigger = trigger.copy(event = PowerEvent.DISCONNECTED)))
+            }
+        }
+    }
+
+    if (trigger is Trigger.Battery || trigger is Trigger.Power) {
+        val detail = if (trigger is Trigger.Battery) {
+            "${describe(context, trigger)}: se dispara una vez al cruzar ese número, no en cada cambio."
+        } else {
+            "${describe(context, trigger)}, con cable o base inalámbrica."
+        }
+        Text(
+            "$detail\nMientras esté activa vas a ver la notificación fija \"La Vara está activa\": Android exige ese aviso " +
+                "para que una app cerrada pueda escuchar la batería y el cargador.",
             style = MaterialTheme.typography.bodyMedium,
         )
     }

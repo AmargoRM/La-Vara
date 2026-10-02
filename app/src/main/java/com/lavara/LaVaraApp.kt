@@ -17,23 +17,25 @@ class LaVaraApp : Application() {
         UpdateWorker.schedule(this)
         container.appScope.launch {
             createTemplatesOnce()
-            container.alarmScheduler.reschedule("app iniciada")
+            container.refreshTriggers("app iniciada")
         }
     }
 
-    /** "Prueba Vara" se crea una sola vez: si el usuario la borra, no vuelve a aparecer. */
+    /**
+     * Los ejemplos se crean una sola vez, desactivados: si el usuario los borra, no vuelven.
+     * Cada grupo tiene su clave para que los ejemplos nuevos aparezcan también a quien ya tenía La Vara.
+     */
     private suspend fun createTemplatesOnce() {
         val settings = container.settingsRepository
-        if (settings.get(KEY_TEMPLATES) != null) return
-        if (container.automationRepository.find(Templates.PRUEBA_VARA_ID) == null) {
+        for ((key, build) in Templates.groups()) {
+            if (settings.get(key) != null) continue
             val now = container.clock.now().toInstant().toEpochMilli()
-            container.automationRepository.save(Templates.pruebaVara(now))
-            container.logger.info("App", "Se creó la automatización de ejemplo \"Prueba Vara\" (desactivada)", Templates.PRUEBA_VARA_ID)
+            for (automation in build(now)) {
+                if (container.automationRepository.find(automation.id) != null) continue
+                container.automationRepository.save(automation)
+                container.logger.info("App", "Se creó la automatización de ejemplo \"${automation.name}\" (desactivada)", automation.id)
+            }
+            settings.set(key, "1")
         }
-        settings.set(KEY_TEMPLATES, "1")
-    }
-
-    private companion object {
-        const val KEY_TEMPLATES = "plantillas_creadas"
     }
 }

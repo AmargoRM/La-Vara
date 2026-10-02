@@ -56,6 +56,7 @@ class AutomationRepository(
         fun triggerType(trigger: Trigger): String = when (trigger) {
             is Trigger.Time -> "time"
             is Trigger.Battery -> "battery"
+            is Trigger.Power -> "power"
             Trigger.Manual -> "manual"
         }
     }

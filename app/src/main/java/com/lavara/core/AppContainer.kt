@@ -13,6 +13,7 @@ import com.lavara.system.alarm.AlarmScheduler
 import com.lavara.system.device.AndroidActionExecutor
 import com.lavara.system.device.AndroidDeviceState
 import com.lavara.system.device.BatteryOptimization
+import com.lavara.system.device.DeviceWatcher
 import com.lavara.system.update.ApkInstaller
 import com.lavara.system.update.GitHubReleaseClient
 import com.lavara.system.update.TokenStore
@@ -43,6 +44,16 @@ class AppContainer(context: Context) {
     val engine by lazy { AutomationEngine(automationRepository, actionExecutor, clock, deviceState) }
     val automationRunner by lazy { AutomationRunner(engine, automationRepository, runRepository, logger) }
     val alarmScheduler by lazy { AlarmScheduler(appContext, automationRepository, settingsRepository, logger, clock) }
+    val deviceWatcher by lazy { DeviceWatcher(appContext, automationRepository, settingsRepository, logger) { automationRunner } }
+
+    /**
+     * Después de cualquier cambio (automatización guardada, reinicio, cambio de hora): programa la
+     * próxima alarma y enciende o apaga la vigilancia de batería y cargador. [reason] queda en el registro.
+     */
+    suspend fun refreshTriggers(reason: String) {
+        alarmScheduler.reschedule(reason)
+        deviceWatcher.sync(reason)
+    }
 
     val updateNotifier = UpdateNotifier(appContext)
     val apkInstaller = ApkInstaller(appContext)
