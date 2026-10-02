@@ -2,13 +2,16 @@ package com.lavara.system.device
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -25,6 +28,7 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
     override suspend fun execute(action: Action): ActionResult = when (action) {
         is Action.ShowNotification -> showNotification(action)
         is Action.OpenApp -> openApp(action)
+        is Action.OpenUrl -> openUrl(action)
         // Delay y RunAutomation los resuelve el motor; no deberían llegar acá.
         is Action.Delay, is Action.RunAutomation -> ActionResult.Failure("El motor no pasó esta acción al ejecutor")
     }
@@ -34,49 +38,92 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
 
-    // El permiso se comprueba en canNotify(); lint no lo ve porque está en otra función.
-    @SuppressLint("MissingPermission")
     private fun showNotification(action: Action.ShowNotification): ActionResult {
-        if (!canNotify()) {
-            return ActionResult.Failure("Falta el permiso de notificaciones. Abrí La Vara y permitilo.")
-        }
-        val manager = NotificationManagerCompat.from(context)
-        if (!manager.areNotificationsEnabled()) {
-            return ActionResult.Failure("Las notificaciones de La Vara están apagadas en los ajustes de Android.")
-        }
-        ensureChannel()
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
+        return notify(action.title, action.text, open)?.let { ActionResult.Failure(it) } ?: ActionResult.Success
+    }
+
+    /** Muestra una notificación. Devuelve null si salió bien, o el motivo si no. */
+    // El permiso se comprueba en canNotify(); lint no lo ve porque está en otra función.
+    @SuppressLint("MissingPermission")
+    private fun notify(title: String, text: String, onTap: PendingIntent): String? {
+        if (!canNotify()) return "Falta el permiso de notificaciones. Abrí La Vara y permitilo."
+        val manager = NotificationManagerCompat.from(context)
+        if (!manager.areNotificationsEnabled()) return "Las notificaciones de La Vara están apagadas en los ajustes de Android."
+        ensureChannel()
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notificacion)
-            .setContentTitle(action.title)
-            .setContentText(action.text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(action.text))
-            .setContentIntent(open)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(onTap)
             .setAutoCancel(true)
             .build()
         return try {
             manager.notify(nextId.incrementAndGet(), notification)
-            ActionResult.Success
+            null
         } catch (e: SecurityException) {
-            ActionResult.Failure("Android no dejó mostrar la notificación: ${e.message}")
+            "Android no dejó mostrar la notificación: ${e.message}"
         }
     }
 
+    /** Si Android deja a La Vara abrir apps aunque esté en segundo plano (permiso "Mostrar sobre otras apps"). */
+    fun canOpenAppsInBackground(): Boolean = Settings.canDrawOverlays(context)
+
+    fun openBackgroundAppsSettings() {
+        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    }
+
+    /** La Vara está a la vista (por ejemplo, al tocar "Probar ahora"). */
+    private fun isInForeground(): Boolean {
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }
+
     /**
-     * Intento básico. Desde Android 10 una app en segundo plano no puede abrir otras apps libremente;
-     * la solución completa (permiso "Mostrar sobre otras apps" o notificación) llega en S5.
+     * Desde Android 10, una app en segundo plano no puede abrir otras apps salvo que tenga el permiso
+     * "Mostrar sobre otras apps". Sin ese permiso, Android bloquea la apertura sin avisar; por eso se decide
+     * antes y, si no se puede, se muestra una notificación que abre la app al tocarla.
      */
     private fun openApp(action: Action.OpenApp): ActionResult {
         val launch = context.packageManager.getLaunchIntentForPackage(action.packageName)
-            ?: return ActionResult.Failure("La app ${action.packageName} no está instalada o no se puede abrir")
-        return try {
-            context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            ActionResult.Success
-        } catch (e: RuntimeException) {
-            ActionResult.Failure("Android no dejó abrir ${action.packageName}: ${e.message}")
+            ?: return ActionResult.Failure(
+                "La app ${action.packageName} no está instalada o no se puede abrir. Editá la automatización y elegila de la lista.",
+            )
+        val name = InstalledApps(context).label(action.packageName) ?: action.packageName
+        return start(launch, name, requestCode = action.packageName.hashCode())
+    }
+
+    private fun openUrl(action: Action.OpenUrl): ActionResult {
+        val view = Intent(Intent.ACTION_VIEW, Uri.parse(action.url))
+        if (context.packageManager.queryIntentActivities(view, 0).isEmpty()) {
+            return ActionResult.Failure("No hay ninguna app para abrir enlaces de ${action.host}.")
         }
+        return start(view, "el enlace de ${action.host}", requestCode = action.url.hashCode())
+    }
+
+    /** Abre [intent] si Android lo permite; si no, deja una notificación que lo abre al tocarla. */
+    private fun start(intent: Intent, name: String, requestCode: Int): ActionResult {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (isInForeground() || canOpenAppsInBackground()) {
+            return try {
+                context.startActivity(intent)
+                ActionResult.Success
+            } catch (e: RuntimeException) {
+                ActionResult.Failure("Android no dejó abrir $name: ${e.message}")
+            }
+        }
+        val tap = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
+        val shown = notify("Abrir $name", "Tocá para abrir $name.", tap)
+        return ActionResult.Failure(
+            "Android no deja abrir $name con La Vara en segundo plano. " +
+                (if (shown == null) "Se mostró una notificación para abrirla. " else "Tampoco se pudo avisar: $shown ") +
+                "Para que se abra sola, permití \"Mostrar sobre otras apps\" en Inicio.",
+        )
     }
 
     private fun ensureChannel() {

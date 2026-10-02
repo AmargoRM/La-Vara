@@ -87,6 +87,7 @@ fun comparisonText(comparison: Comparison) = when (comparison) {
 fun actionTitle(action: Action) = when (action) {
     is Action.ShowNotification -> "Mostrar notificación"
     is Action.OpenApp -> "Abrir app"
+    is Action.OpenUrl -> "Abrir enlace"
     is Action.Delay -> "Esperar"
     is Action.RunAutomation -> "Ejecutar otra automatización"
 }

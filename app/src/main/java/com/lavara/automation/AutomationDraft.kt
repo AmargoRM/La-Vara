@@ -35,6 +35,9 @@ data class AutomationDraft(
                 is Action.Delay -> if (action.seconds > MAX_DELAY_SECONDS) {
                     add("La acción ${i + 1} espera más de $MAX_DELAY_SECONDS segundos; por ahora es el máximo.")
                 }
+                is Action.OpenUrl -> if (action.host == "enlace" || !action.host.contains('.')) {
+                    add("La acción ${i + 1} necesita un enlace completo, por ejemplo https://waze.com.")
+                }
                 is Action.OpenApp -> Unit
             }
         }

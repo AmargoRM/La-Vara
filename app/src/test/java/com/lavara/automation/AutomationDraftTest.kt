@@ -81,6 +81,8 @@ class AutomationDraftTest {
         val longDelay = AutomationDraft(name = "X", actions = listOf(Action.Delay(11)))
         assertEquals(1, longDelay.problems().size)
         assertEquals(emptyList<String>(), AutomationDraft(name = "X", actions = listOf(Action.Delay(10))).problems())
+        assertEquals(1, AutomationDraft(name = "X", actions = listOf(Action.OpenUrl("https://"))).problems().size)
+        assertEquals(emptyList<String>(), AutomationDraft(name = "X", actions = listOf(Action.OpenUrl("https://waze.com/ul?q=x"))).problems())
         assertEquals(emptyList<String>(), AutomationDraft.new().copy(name = "X").problems())
     }
 

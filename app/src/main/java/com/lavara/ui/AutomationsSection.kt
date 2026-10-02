@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.lavara.actions.Action
 import com.lavara.automation.Automation
 import com.lavara.automation.AutomationDraft
 import com.lavara.automation.ExecutionStatus
@@ -86,6 +87,9 @@ fun AutomationsSection(
                 notifications = container.actionExecutor.canNotify(),
                 exactAlarms = container.alarmScheduler.canScheduleExact(),
                 battery = container.batteryOptimization.isExcluded(),
+                // Solo hace falta si alguna automatización activa abre apps.
+                openApps = automations.none { a -> a.enabled && a.actions.any { it is Action.OpenApp || it is Action.OpenUrl } } ||
+                    container.actionExecutor.canOpenAppsInBackground(),
             )
         }
 
@@ -142,6 +146,7 @@ fun AutomationsSection(
                 },
                 onExactAlarms = { container.alarmScheduler.openExactAlarmSettings() },
                 onBattery = { container.batteryOptimization.requestExclusion() },
+                onOpenApps = { container.actionExecutor.openBackgroundAppsSettings() },
             )
         }
 
@@ -238,12 +243,18 @@ fun AutomationsSection(
     }
 }
 
-private data class Health(val notifications: Boolean, val exactAlarms: Boolean, val battery: Boolean) {
-    val allOk get() = notifications && exactAlarms && battery
+private data class Health(val notifications: Boolean, val exactAlarms: Boolean, val battery: Boolean, val openApps: Boolean) {
+    val allOk get() = notifications && exactAlarms && battery && openApps
 }
 
 @Composable
-private fun HealthCard(health: Health, onNotifications: () -> Unit, onExactAlarms: () -> Unit, onBattery: () -> Unit) {
+private fun HealthCard(
+    health: Health,
+    onNotifications: () -> Unit,
+    onExactAlarms: () -> Unit,
+    onBattery: () -> Unit,
+    onOpenApps: () -> Unit,
+) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("Para que las alarmas lleguen a tiempo", style = MaterialTheme.typography.titleMedium)
@@ -261,6 +272,13 @@ private fun HealthCard(health: Health, onNotifications: () -> Unit, onExactAlarm
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedButton(onClick = onBattery) { Text("Quitar el ahorro de batería") }
+            }
+            if (!health.openApps) {
+                Text(
+                    "Una automatización abre apps. Android solo deja hacerlo con La Vara cerrada si le das el permiso \"Mostrar sobre otras apps\". Sin él, vas a recibir una notificación para abrirla a mano.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = onOpenApps) { Text("Permitir abrir apps") }
             }
         }
     }

@@ -128,7 +128,17 @@ Lista vacía = no se cumple.
 { "type": "open_app", "packageName": "com.whatsapp" }
 ```
 
-- `packageName` (obligatorio, no vacío): el nombre de paquete de la app, no su nombre visible.
+- `packageName` (obligatorio, no vacío): el nombre de paquete de la app, no su nombre visible (Waze es `com.waze`). En el editor se elige de la lista de apps instaladas.
+
+### `open_url`: abrir un enlace
+
+```json
+{ "type": "open_url", "url": "https://waze.com/ul?q=San%20Jos%C3%A9" }
+```
+
+- `url` (obligatorio): enlace completo que empieza con `http://` o `https://`. Se abre en el navegador o en la app que maneje ese enlace.
+- En los registros solo aparece el sitio (`waze.com`), nunca el enlace completo, porque puede llevar claves.
+- Si La Vara está en segundo plano y no tiene el permiso "Mostrar sobre otras apps", se muestra una notificación para abrirlo a mano (igual que `open_app`).
 
 ### `delay`: esperar
 
