@@ -295,7 +295,7 @@ private fun HealthCard(
             }
             if (!health.openApps) {
                 Text(
-                    "Una automatización abre apps. Android solo deja hacerlo con La Vara cerrada si le das el permiso \"Mostrar sobre otras apps\". Sin él, vas a recibir una notificación para abrirla a mano.",
+                    "Una automatización abre apps. Android solo deja hacerlo con La Vara cerrada si le das el permiso \"Mostrar sobre otras apps\". Sin él, vas a recibir una notificación para abrirla a mano. Si Android dice \"A la app se le negó el acceso\": Ajustes → Aplicaciones → La Vara → ⋮ → \"Permitir configuración restringida\", y volvé a intentarlo.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedButton(onClick = onOpenApps) { Text("Permitir abrir apps") }
