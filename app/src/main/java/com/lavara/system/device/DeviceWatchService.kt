@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.lavara.LaVaraApp
 import com.lavara.R
+import com.lavara.system.connectivity.WifiWatcher
 import com.lavara.ui.MainActivity
 import kotlinx.coroutines.launch
 
@@ -30,6 +31,7 @@ class DeviceWatchService : Service() {
         override fun onReceive(context: Context, intent: Intent) = handle(intent)
     }
     private var registered = false
+    private var wifi: WifiWatcher? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -56,6 +58,10 @@ class DeviceWatchService : Service() {
             // Al registrarse, Android entrega enseguida el último estado de la batería.
             ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
             registered = true
+            wifi = WifiWatcher(this) { ssid, connected ->
+                val at = container.clock.now().toInstant().toEpochMilli()
+                container.appScope.launch { container.deviceWatcher.onWifi(ssid, connected, at) }
+            }.also { it.start() }
         }
         // Si Android cierra el servicio por falta de memoria, lo vuelve a abrir cuando puede.
         return START_STICKY
@@ -63,6 +69,8 @@ class DeviceWatchService : Service() {
 
     override fun onDestroy() {
         if (registered) unregisterReceiver(receiver)
+        wifi?.stop()
+        wifi = null
         registered = false
         isRunning = false
         super.onDestroy()
@@ -89,7 +97,7 @@ class DeviceWatchService : Service() {
     private fun startInForeground() {
         val manager = getSystemService(NotificationManager::class.java)
         val channel = NotificationChannel(CHANNEL_ID, "La Vara está activa", NotificationManager.IMPORTANCE_MIN).apply {
-            description = "Aviso fijo mientras La Vara escucha la batería y el cargador. Se puede ocultar sin apagar la vigilancia."
+            description = "Aviso fijo mientras La Vara escucha la batería, el cargador y el Wi-Fi. Se puede ocultar sin apagar la vigilancia."
             setShowBadge(false)
         }
         manager.createNotificationChannel(channel)
@@ -97,7 +105,7 @@ class DeviceWatchService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notificacion)
             .setContentTitle("La Vara está activa")
-            .setContentText("Atenta a la batería y al cargador.")
+            .setContentText("Atenta a la batería, el cargador y el Wi-Fi.")
             .setContentIntent(open)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)

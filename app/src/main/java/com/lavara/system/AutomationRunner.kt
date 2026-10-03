@@ -47,6 +47,8 @@ class AutomationRunner(
         is TriggerEvent.BatteryChanged -> "batería ${event.previousLevel ?: "?"} % → ${event.level} %"
         is TriggerEvent.PowerChanged -> if (event.connected) "cargador conectado" else "cargador desconectado"
         is TriggerEvent.LocationChanged -> (if (event.entered) "entrada a la zona de " else "salida de la zona de ") + event.automationId
+        is TriggerEvent.BluetoothChanged -> "Bluetooth ${event.name.ifBlank { event.address }} " + if (event.connected) "conectado" else "desconectado"
+        is TriggerEvent.WifiChanged -> "Wi-Fi ${event.ssid ?: "(nombre desconocido)"} " + if (event.connected) "conectado" else "desconectado"
         is TriggerEvent.ManualRun -> "ejecución manual de ${event.automationId}"
     }
 
