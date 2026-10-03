@@ -20,8 +20,9 @@ import java.util.UUID
 
 /**
  * Automatizaciones que abren algo en pantalla y se dispararon con el teléfono bloqueado. Android no deja a
- * ninguna app saltarse el PIN, así que esperan: apenas el usuario desbloquea, se ejecutan enteras, sin
- * notificación de "Tocá para abrir". Mientras esperan, [UnlockWaitService] mantiene viva a La Vara.
+ * ninguna app saltarse el PIN, así que esperan: apenas el usuario desbloquea, se ejecutan (enteras, o solo la
+ * parte que abre apps si lo demás ya corrió), sin notificación de "Tocá para abrir". Mientras esperan,
+ * [UnlockWaitService] mantiene viva a La Vara.
  * Se guardan en settings para no perderlas si Android cierra la app; las de más de [MAX_WAIT_MILLIS] se descartan.
  */
 class UnlockQueue(
@@ -37,12 +38,17 @@ class UnlockQueue(
     private val mutex = Mutex()
     private var fallbackReceiver: BroadcastReceiver? = null
 
-    /** Pone en espera [ids], enciende la pantalla para pedir el desbloqueo y espera a que el usuario desbloquee. */
-    suspend fun wait(ids: List<String>) {
+    /**
+     * Pone en espera [whole] (se ejecutan enteras) y [rest] (solo les falta lo que abre apps o toca botones),
+     * enciende la pantalla para pedir el desbloqueo y espera a que el usuario desbloquee.
+     */
+    suspend fun wait(whole: List<String>, rest: List<String> = emptyList()) {
+        val ids = whole + rest
         if (ids.isEmpty()) return
         val now = clock.now().toInstant().toEpochMilli()
         mutex.withLock {
-            val pending = read().filterKeys { it !in ids } + ids.associateWith { now }
+            val pending = read().filterKeys { it !in ids } +
+                whole.associateWith { Pending(now, onlyRest = false) } + rest.associateWith { Pending(now, onlyRest = true) }
             write(pending)
         }
         val names = ids.map { automations.find(it)?.name ?: it }
@@ -72,14 +78,20 @@ class UnlockQueue(
             write(emptyMap())
             all
         }
-        for ((id, since) in due) {
+        for ((id, entry) in due) {
+            val since = entry.since
             val name = automations.find(id)?.name ?: id
             if (now - since > MAX_WAIT_MILLIS) {
                 logger.warn(SOURCE, "$name no se ejecutó: esperó más de ${MAX_WAIT_MILLIS / 3_600_000} horas al desbloqueo.", id)
                 continue
             }
-            logger.info(SOURCE, "Desbloqueado ($reason): se ejecuta $name, que esperaba desde hace ${(now - since) / 1000} s.", id)
-            runner().handle(TriggerEvent.ManualRun(id, "desbloqueo-" + UUID.randomUUID()))
+            if (entry.onlyRest) {
+                logger.info(SOURCE, "Desbloqueado ($reason): sigue $name con lo que abre apps, que esperaba desde hace ${(now - since) / 1000} s.", id)
+                runner().runAfterUnlock(id)
+            } else {
+                logger.info(SOURCE, "Desbloqueado ($reason): se ejecuta $name, que esperaba desde hace ${(now - since) / 1000} s.", id)
+                runner().handle(TriggerEvent.ManualRun(id, "desbloqueo-" + UUID.randomUUID()))
+            }
         }
     }
 
@@ -107,19 +119,24 @@ class UnlockQueue(
         fallbackReceiver = null
     }
 
-    private suspend fun read(): Map<String, Long> =
+    /** Desde cuándo espera y si solo le falta la parte que abre apps. */
+    private data class Pending(val since: Long, val onlyRest: Boolean)
+
+    // Una línea por automatización: "id|desde" (entera) o "id|desde|resto" (solo lo que abre apps).
+    private suspend fun read(): Map<String, Pending> =
         settings.get(KEY).orEmpty().lines().mapNotNull { line ->
             val parts = line.split('|')
             val since = parts.getOrNull(1)?.toLongOrNull() ?: return@mapNotNull null
-            parts[0] to since
+            parts[0] to Pending(since, onlyRest = parts.getOrNull(2) == REST)
         }.toMap()
 
-    private suspend fun write(pending: Map<String, Long>) =
-        settings.set(KEY, pending.entries.joinToString("\n") { "${it.key}|${it.value}" })
+    private suspend fun write(pending: Map<String, Pending>) =
+        settings.set(KEY, pending.entries.joinToString("\n") { "${it.key}|${it.value.since}" + if (it.value.onlyRest) "|$REST" else "" })
 
     private companion object {
         const val SOURCE = "Desbloqueo"
         const val KEY = "pendientes_desbloqueo"
+        const val REST = "resto"
         const val MAX_WAIT_MILLIS = 2 * 3_600_000L
     }
 }

@@ -17,8 +17,11 @@ class AutomationRunner(
     private val automations: AutomationRepository,
     private val runs: RunRepository,
     private val logger: AppLogger,
-    /** Recibe las automatizaciones que quedaron esperando el desbloqueo. */
-    private val onWaitingUnlock: suspend (List<String>) -> Unit = {},
+    /**
+     * Recibe las automatizaciones que quedaron esperando el desbloqueo: [whole] esperan enteras; [rest] ya
+     * hicieron lo que no necesita pantalla y solo esperan lo que abre apps o toca botones.
+     */
+    private val onWaitingUnlock: suspend (whole: List<String>, rest: List<String>) -> Unit = { _, _ -> },
     /** Recibe cada automatización que falló (id, nombre, motivo), para avisar al usuario. */
     private val onFailed: (id: String, name: String, reason: String) -> Unit = { _, _, _ -> },
 ) {
@@ -34,9 +37,24 @@ class AutomationRunner(
         }
         if (results.isEmpty()) logger.info(SOURCE, "Ninguna automatización activa responde a este evento")
         record(results)
-        val waiting = results.filter { it.status == ExecutionStatus.WAITING_UNLOCK }.map { it.automationId }
-        if (waiting.isNotEmpty()) onWaitingUnlock(waiting)
+        val whole = results.filter { it.status == ExecutionStatus.WAITING_UNLOCK }.map { it.automationId }
+        val rest = results.filter { it.waitingUnlock }.map { it.automationId }
+        if (whole.isNotEmpty() || rest.isNotEmpty()) onWaitingUnlock(whole, rest)
         return results
+    }
+
+    /** Hace la parte de [automationId] que esperaba el desbloqueo (lo que abre apps o toca botones). */
+    suspend fun runAfterUnlock(automationId: String): ExecutionResult? {
+        val result = try {
+            engine.runAfterUnlock(automationId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.error(SOURCE, "El motor falló al seguir $automationId tras el desbloqueo: ${e.message ?: e::class.simpleName}", automationId)
+            return null
+        }
+        record(listOf(result))
+        return result
     }
 
     /** Sigue una automatización que estaba en una espera larga, desde la acción [fromAction]. */

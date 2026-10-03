@@ -1,6 +1,10 @@
 package com.lavara.ui.editor
 
+import android.content.Intent
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -9,11 +13,14 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import com.lavara.actions.Action
@@ -42,9 +49,10 @@ internal fun TapFields(action: Action.TapInApp, onPickApp: () -> Unit, onChange:
         label = { Text("Botón que toca") },
         placeholder = { Text("Ej.: Enviar") },
         singleLine = true,
-        supportingText = { Text("El texto del botón o su nombre. En WhatsApp, la flecha de enviar se llama \"Enviar\".") },
+        supportingText = { Text("El texto del botón o su nombre. Si no lo sabés, usá \"Ver los botones\". En WhatsApp, la flecha de enviar se llama \"Enviar\".") },
         modifier = Modifier.fillMaxWidth(),
     )
+    ButtonPicker(action, label, onChange)
     var seconds by remember(action.waitSeconds) { mutableStateOf(action.waitSeconds.toString()) }
     OutlinedTextField(
         value = seconds,
@@ -59,7 +67,8 @@ internal fun TapFields(action: Action.TapInApp, onPickApp: () -> Unit, onChange:
         modifier = Modifier.fillMaxWidth(),
     )
     Text(
-        "Funciona con el teléfono desbloqueado y la app a la vista. Ponela después de la acción que la abre.",
+        "Funciona con el teléfono desbloqueado y la app a la vista. Ponela después de la acción que la abre. " +
+            "Para reproducir o pausar música no hace falta: la acción \"Música\" funciona en cualquier app y con el teléfono bloqueado.",
         style = MaterialTheme.typography.bodySmall,
     )
     val notAllowed = action.packageName.isNotBlank() && action.packageName !in AllowedApps(context).get()
@@ -80,6 +89,73 @@ internal fun TapFields(action: Action.TapInApp, onPickApp: () -> Unit, onChange:
         )
         OutlinedButton(onClick = { TapService.openSettings(context) }) { Text("Abrir Accesibilidad") }
     }
+}
+
+/**
+ * "Ver los botones": abre la app elegida y La Vara anota los nombres de los botones que se ven. Al volver,
+ * muestra la lista para elegir uno. Solo con la app en la lista permitida y la Accesibilidad encendida.
+ */
+@Composable
+private fun ButtonPicker(action: Action.TapInApp, appLabel: String?, onChange: (Action.TapInApp) -> Unit) {
+    val context = LocalContext.current
+    if (appLabel == null || action.packageName !in AllowedApps(context).get() || !TapService.isEnabled(context)) return
+    // Sobrevive si Android recrea la pantalla mientras el usuario está en la otra app.
+    var waiting by rememberSaveable(action.packageName) { mutableStateOf(false) }
+    var problem by remember { mutableStateOf<String?>(null) }
+    val captured by TapService.captured.collectAsState()
+    OutlinedButton(
+        onClick = {
+            val service = TapService.current()
+            val launch = context.packageManager.getLaunchIntentForPackage(action.packageName)
+            problem = when {
+                service == null -> "La Accesibilidad de La Vara todavía no arrancó. Apagala y encendela en Ajustes."
+                launch == null -> "No se pudo abrir $appLabel."
+                !service.startCapture(action.packageName, appLabel) -> "$appLabel no está en la lista de apps permitidas."
+                else -> {
+                    waiting = true
+                    context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    null
+                }
+            }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text("Ver los botones de $appLabel") }
+    Text(
+        "Se abre $appLabel: andá a la pantalla donde está el botón, esperá un segundo y volvé a La Vara " +
+            "(con la notificación \"Elegí el botón\" o con apps recientes). Vas a ver la lista para elegir.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
+
+    if (!waiting) return
+    val buttons = captured?.takeIf { it.packageName == action.packageName }?.labels
+    fun close() {
+        waiting = false
+        TapService.clearCapture()
+    }
+    AlertDialog(
+        onDismissRequest = { close() },
+        title = { Text("Botones de $appLabel") },
+        text = {
+            if (buttons.isNullOrEmpty()) {
+                Text("Todavía no vi ningún botón. Andá a $appLabel, abrí la pantalla donde está el botón y volvé.")
+            } else {
+                LazyColumn(modifier = Modifier.heightIn(max = 400.dp)) {
+                    items(buttons) { name ->
+                        TextButton(
+                            onClick = {
+                                onChange(action.copy(button = name.take(60)))
+                                close()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(name, modifier = Modifier.fillMaxWidth()) }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { close() }) { Text("Cancelar") } },
+    )
 }
 
 /** Confirmación antes de agregar una app a la lista donde La Vara puede tocar botones. */

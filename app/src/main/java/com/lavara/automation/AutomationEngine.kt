@@ -94,6 +94,31 @@ class AutomationEngine(
     }
 
     /**
+     * Hace la parte que quedó esperando el desbloqueo (ver [LockedSplit]): solo lo que abre apps o toca
+     * botones, con las esperas que hay entre esas acciones. No vuelve a revisar condiciones ni cooldown.
+     */
+    suspend fun runAfterUnlock(automationId: String): ExecutionResult {
+        val start = nowMillis()
+        val automation = source.find(automationId)
+            ?: return ExecutionResult(automationId, ExecutionStatus.SKIPPED_DISABLED, "La automatización ya no existe", start, 0)
+        if (!automation.enabled) {
+            return ExecutionResult(automationId, ExecutionStatus.SKIPPED_DISABLED, "Se desactivó mientras esperaba el desbloqueo", start, 0)
+        }
+        val part = LockedSplit.of(automation.actions)?.afterUnlock
+            ?: return ExecutionResult(automationId, ExecutionStatus.SKIPPED_CONDITIONS, "Se editó mientras esperaba: ya no tiene una parte que espere el desbloqueo", start, 0)
+        val busy = mutex.withLock {
+            (automation.id in running).also { if (!it) running += automation.id }
+        }
+        if (busy) return ExecutionResult(automationId, ExecutionStatus.SKIPPED_DUPLICATE, "Ya se está ejecutando", start, 0)
+        try {
+            val result = executeActions(automation, listOf(automation.id), start, mutableListOf(), only = part)
+            return result.copy(reason = "Al desbloquear: " + result.reason.replaceFirstChar { it.lowercase() })
+        } finally {
+            mutex.withLock { running -= automation.id }
+        }
+    }
+
+    /**
      * Ejecuta una automatización y agrega su resultado a [results].
      * [dedupKey] es null cuando la pide otra automatización (RunAutomation): ahí no se aplican
      * cooldown ni deduplicación, solo las condiciones.
@@ -116,11 +141,16 @@ class AutomationEngine(
         val check = evaluator.check(automation.conditions)
         if (!check.passed) return skipped(ExecutionStatus.SKIPPED_CONDITIONS, check.reason)
 
-        // Abrir apps o tocar botones con el teléfono bloqueado no sirve: se ejecuta entera al desbloquear.
-        // No cuenta para el cooldown; el mismo evento no la vuelve a poner en espera.
+        // Abrir apps o tocar botones con el teléfono bloqueado no sirve. Si tiene acciones que no necesitan
+        // pantalla (volumen, música…), esas corren ya y el resto al desbloquear; si no, se ejecuta entera al
+        // desbloquear, sin contar para el cooldown. El mismo evento no la vuelve a poner en espera.
+        var split: LockedSplit? = null
         if (dedupKey != null && automation.actions.any { it.needsUnlock() } && deviceState.isLocked()) {
-            mutex.withLock { remember("${automation.id}|$dedupKey") }
-            return skipped(ExecutionStatus.WAITING_UNLOCK, "El teléfono está bloqueado: se ejecuta apenas lo desbloquees")
+            split = LockedSplit.of(automation.actions)
+            if (split == null) {
+                mutex.withLock { remember("${automation.id}|$dedupKey") }
+                return skipped(ExecutionStatus.WAITING_UNLOCK, "El teléfono está bloqueado: se ejecuta apenas lo desbloquees")
+            }
         }
 
         mutex.withLock {
@@ -129,7 +159,15 @@ class AutomationEngine(
             if (dedupKey != null) remember("${automation.id}|$dedupKey")
         }
         try {
-            val result = executeActions(automation, chain, start, results)
+            var result = executeActions(automation, chain, start, results, only = split?.now)
+            if (split != null) {
+                val stopped = result.status == ExecutionStatus.FAILED && automation.onError == OnError.STOP
+                val waiting = split.afterUnlock.count { !(automation.actions[it] is Action.Delay) }
+                result = if (stopped) result else result.copy(
+                    reason = result.reason + "; " + (if (waiting == 1) "1 espera" else "$waiting esperan") + " el desbloqueo (teléfono bloqueado)",
+                    waitingUnlock = true,
+                )
+            }
             results += result
             return result
         } finally {
@@ -163,6 +201,8 @@ class AutomationEngine(
         start: Long,
         results: MutableList<ExecutionResult>,
         from: Int = 0,
+        /** Si no es null, solo hace las acciones con estos números (ver [LockedSplit]). */
+        only: Set<Int>? = null,
     ): ExecutionResult {
         val variables = Variables.from(clock.now(), deviceState.batteryLevel())
         val records = mutableListOf<ActionRecord>()
@@ -171,7 +211,7 @@ class AutomationEngine(
         var continuesAt: Long? = null
 
         for ((index, action) in automation.actions.withIndex()) {
-            if (index < from) continue
+            if (index < from || (only != null && index !in only)) continue
             // Espera larga: no se queda despierto esperando; el resto sigue con una alarma.
             if (action is Action.Delay && action.seconds > INLINE_DELAY_SECONDS && later != null) {
                 if (index == automation.actions.lastIndex) break

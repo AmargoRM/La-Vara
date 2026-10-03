@@ -2,23 +2,38 @@ package com.lavara.system.accessibility
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.annotation.SuppressLint
+import android.app.KeyguardManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityManager
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.lavara.LaVaraApp
+import com.lavara.R
+import com.lavara.actions.ButtonList
 import com.lavara.actions.ButtonMatch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
 
 /**
- * Servicio de Accesibilidad de La Vara. Solo hace una cosa: cuando una automatización lo pide, toca un
- * botón dentro de una app de la lista [AllowedApps]. No escucha nada por su cuenta, no guarda lo que hay
- * en pantalla y nunca escribe en los registros el texto de otras apps.
+ * Servicio de Accesibilidad de La Vara. Hace dos cosas, siempre en apps de la lista [AllowedApps]:
+ * - cuando una automatización lo pide, toca un botón;
+ * - cuando el usuario lo pide desde el editor ("Ver los botones"), lista los nombres de los botones que se
+ *   ven en esa app, solo en memoria, por 3 minutos como máximo, para elegir uno.
+ * No guarda lo que hay en pantalla y nunca escribe en los registros el texto de otras apps.
  */
 class TapService : AccessibilityService() {
 
@@ -29,13 +44,110 @@ class TapService : AccessibilityService() {
         log("Accesibilidad encendida. Apps permitidas: ${apps.size}.")
     }
 
-    /** No se usa: La Vara no reacciona a lo que pasa en pantalla, solo toca cuando una acción lo pide. */
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
+    /** Solo se usa mientras el usuario elige un botón; el resto del tiempo La Vara no mira la pantalla. */
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        val target = capturePackage ?: return
+        if (SystemClock.uptimeMillis() > captureUntil) {
+            stopCapture()
+            return
+        }
+        if (event?.packageName?.toString() != target) return
+        val root = rootInActiveWindow ?: return
+        if (root.packageName?.toString() != target) return
+        val labels = ButtonList.from(candidates(root))
+        if (labels.isNotEmpty()) _captured.value = ScreenButtons(target, labels)
+    }
+
+    /**
+     * Empieza a mirar los botones de [packageName] (que tiene que estar en la lista permitida). Pide a Android
+     * los avisos de cambios en pantalla solo mientras dura, y muestra una notificación para volver a La Vara.
+     */
+    fun startCapture(packageName: String, appLabel: String): Boolean {
+        if (packageName !in AllowedApps(this).get()) return false
+        _captured.value = null
+        capturePackage = packageName
+        captureUntil = SystemClock.uptimeMillis() + CAPTURE_MILLIS
+        setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED)
+        showCaptureNotification(appLabel)
+        return true
+    }
+
+    /** Deja de mirar la pantalla y vuelve a los avisos mínimos. */
+    fun stopCapture() {
+        capturePackage = null
+        setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
+        NotificationManagerCompat.from(this).cancel(CAPTURE_NOTIFICATION)
+    }
+
+    private fun setEventTypes(types: Int) {
+        val info = serviceInfo ?: return
+        info.eventTypes = types
+        serviceInfo = info
+    }
+
+    /** Todo lo tocable y visible de la pantalla, con su nombre y su posición. */
+    private fun candidates(root: AccessibilityNodeInfo): List<ButtonList.Candidate> {
+        val found = mutableListOf<ButtonList.Candidate>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>().apply { add(root) }
+        var visited = 0
+        val bounds = Rect()
+        while (queue.isNotEmpty() && visited < MAX_NODES) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isVisibleToUser && node.isClickable) {
+                node.getBoundsInScreen(bounds)
+                found += ButtonList.Candidate(node.text, node.contentDescription, innerText(node), node.viewIdResourceName, bounds.top, bounds.left)
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        return found
+    }
+
+    /** El primer texto o descripción de adentro de un botón que no tiene nombre propio (hasta 3 niveles). */
+    private fun innerText(node: AccessibilityNodeInfo, depth: Int = 0): CharSequence? {
+        if (depth >= 3) return null
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val own = child.text?.takeIf { it.isNotBlank() } ?: child.contentDescription?.takeIf { it.isNotBlank() }
+            if (own != null) return own
+            innerText(child, depth + 1)?.let { return it }
+        }
+        return null
+    }
+
+    // El permiso de notificaciones se revisa con areNotificationsEnabled; sin él, no se muestra y listo.
+    @SuppressLint("MissingPermission")
+    private fun showCaptureNotification(appLabel: String) {
+        val manager = NotificationManagerCompat.from(this)
+        if (!manager.areNotificationsEnabled()) return
+        getSystemService(NotificationManager::class.java).createNotificationChannel(
+            NotificationChannel(CAPTURE_CHANNEL, "Elegir un botón", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Aparece solo mientras elegís un botón de otra app en el editor."
+            },
+        )
+        val back = packageManager.getLaunchIntentForPackage(packageName)
+            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) ?: return
+        val notification = NotificationCompat.Builder(this, CAPTURE_CHANNEL)
+            .setSmallIcon(R.drawable.ic_notificacion)
+            .setContentTitle("Elegí el botón en $appLabel")
+            .setContentText("Andá a la pantalla donde está el botón y tocá acá para volver a La Vara.")
+            .setStyle(NotificationCompat.BigTextStyle().bigText("Andá a la pantalla donde está el botón y tocá acá para volver a La Vara."))
+            .setContentIntent(PendingIntent.getActivity(this, CAPTURE_NOTIFICATION, back, PendingIntent.FLAG_IMMUTABLE))
+            .setAutoCancel(true)
+            .setTimeoutAfter(CAPTURE_MILLIS)
+            .build()
+        try {
+            manager.notify(CAPTURE_NOTIFICATION, notification)
+        } catch (_: SecurityException) {
+            // Sin permiso de notificaciones: se vuelve a La Vara con el botón de apps recientes.
+        }
+    }
 
     override fun onInterrupt() = Unit
 
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
+        capturePackage = null
         log("Accesibilidad apagada.")
         return super.onUnbind(intent)
     }
@@ -74,8 +186,11 @@ class TapService : AccessibilityService() {
             if (SystemClock.uptimeMillis() >= deadline) break
             delay(POLL_MILLIS)
         }
-        return if (appSeen) "no encontré el botón \"$button\" en la pantalla."
-        else "la app no apareció en pantalla (¿teléfono bloqueado o pantalla apagada?)."
+        if (appSeen) return "no encontré el botón \"$button\" en la pantalla."
+        val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
+            !getSystemService(PowerManager::class.java).isInteractive
+        return if (locked) "la app no apareció en pantalla: el teléfono estaba bloqueado o con la pantalla apagada."
+        else "la app no estaba a la vista. Poné antes la acción \"Abrir app\" de esa misma app."
     }
 
     /** El botón visible que mejor coincide, recorriendo la pantalla de arriba hacia abajo. */
@@ -114,8 +229,25 @@ class TapService : AccessibilityService() {
     companion object {
         private const val POLL_MILLIS = 300L
         private const val MAX_NODES = 3000
+        private const val CAPTURE_MILLIS = 3 * 60_000L
+        private const val CAPTURE_CHANNEL = "elegir_boton"
+        private const val CAPTURE_NOTIFICATION = 3001
 
         private var instance: WeakReference<TapService>? = null
+
+        @Volatile private var capturePackage: String? = null
+        @Volatile private var captureUntil = 0L
+
+        private val _captured = MutableStateFlow<ScreenButtons?>(null)
+
+        /** Los botones que se vieron por última vez mientras el usuario elige uno; null si todavía nada. */
+        val captured: StateFlow<ScreenButtons?> = _captured
+
+        /** Borra la lista (el usuario ya eligió o canceló) y deja de mirar la pantalla. */
+        fun clearCapture() {
+            _captured.value = null
+            current()?.stopCapture() ?: run { capturePackage = null }
+        }
 
         fun current(): TapService? = instance?.get()
 
@@ -132,3 +264,6 @@ class TapService : AccessibilityService() {
         }
     }
 }
+
+/** Nombres de los botones que se ven en [packageName], para elegir uno. Solo vive en memoria. */
+data class ScreenButtons(val packageName: String, val labels: List<String>)
