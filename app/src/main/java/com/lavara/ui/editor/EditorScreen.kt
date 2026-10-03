@@ -766,16 +766,17 @@ private fun PercentSlider(percent: Int, min: Int, onChange: (Int) -> Unit) {
 private fun PermissionHint(action: Action) {
     val context = LocalContext.current
     val controls = remember { SystemControls(context) }
-    val (missing, text, open): Triple<Boolean, String, () -> Unit> = when {
-        action.needsDndAccess() && !controls.hasDndAccess() ->
-            Triple(true, "Falta el permiso \"Acceso a No molestar\". En la lista, buscá La Vara y activalo.", { controls.openDndAccessSettings() })
-        action is Action.SetBrightness && !controls.canWriteSettings() ->
-            Triple(true, "Falta el permiso \"Modificar ajustes del sistema\". Activalo en la pantalla que se abre.", { controls.openWriteSettings() })
-        else -> Triple(false, "", {})
-    }
-    if (missing) {
-        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-        OutlinedButton(onClick = open) { Text("Dar el permiso") }
+    val dnd = action.needsDndAccess() && !controls.hasDndAccess()
+    val brightness = action is Action.SetBrightness && !controls.canWriteSettings()
+    if (!dnd && !brightness) return
+    Text(
+        if (dnd) "Falta el permiso \"Acceso a No molestar\". En la lista, buscá La Vara y activalo."
+        else "Falta el permiso \"Modificar ajustes del sistema\". Activalo en la pantalla que se abre.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+    OutlinedButton(onClick = { if (dnd) controls.openDndAccessSettings() else controls.openWriteSettings() }) {
+        Text("Dar el permiso")
     }
 }
 
