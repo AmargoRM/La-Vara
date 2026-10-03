@@ -94,6 +94,7 @@ import com.lavara.triggers.NextAlarm
 import com.lavara.triggers.PowerEvent
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.Weekday
+import com.lavara.system.notifications.NotificationWatchService
 import com.lavara.ui.actionTitle
 import com.lavara.ui.daysText
 import com.lavara.ui.describe
@@ -221,6 +222,8 @@ fun EditorScreen(container: AppContainer, automationId: String?, onClose: () -> 
 private suspend fun save(container: AppContainer, draft: AutomationDraft): Automation {
     val now = container.clock.now().toInstant().toEpochMilli()
     val automation = draft.toAutomation(newId = "a-" + UUID.randomUUID().toString().take(8), now = now)
+    // Si cambiaron las acciones, una espera larga pendiente seguiría desde la acción equivocada.
+    if (draft.original != null && draft.original.actions != automation.actions) container.laterAlarms.cancel(automation.id)
     container.automationRepository.save(automation)
     val what = if (draft.original == null) "creada con el editor" else "editada"
     container.logger.info("Automatizaciones", "${automation.name}: $what", automation.id)
@@ -241,6 +244,11 @@ private fun savedMessage(context: Context, container: AppContainer, automation: 
         else "Guardada, pero falta el permiso \"Dispositivos cercanos\"."
     }
     if (trigger is Trigger.Wifi) return "Guardada. La Vara queda atenta al Wi-Fi."
+    if (trigger is Trigger.Notification) {
+        return if (NotificationWatchService.isEnabled(context)) "Guardada. La Vara queda atenta a las notificaciones."
+        else "Guardada, pero falta el permiso \"Acceso a notificaciones\"."
+    }
+    if (trigger is Trigger.Nfc) return "Guardada. Acercá el teléfono desbloqueado a la etiqueta para ejecutarla."
     if (trigger !is Trigger.Time) return "Guardada."
     val now = container.clock.now()
     val at = NextAlarm.after(trigger, now)
@@ -267,7 +275,7 @@ private fun StepIndicator(step: Int, modifier: Modifier = Modifier) {
 
 /** Botón de opción: relleno si está elegido, con borde si no. */
 @Composable
-private fun Choice(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+internal fun Choice(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     if (selected) {
         Button(onClick = onClick, modifier = modifier.height(48.dp)) { Text(label, textAlign = TextAlign.Center) }
     } else {
@@ -330,6 +338,14 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
         }
         Choice("Wi-Fi", trigger is Trigger.Wifi, Modifier.weight(1f)) {
             if (trigger !is Trigger.Wifi) onChange(draft.copy(trigger = Trigger.Wifi()))
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Choice("Notificación", trigger is Trigger.Notification, Modifier.weight(1f)) {
+            if (trigger !is Trigger.Notification) onChange(draft.copy(trigger = Trigger.Notification()))
+        }
+        Choice("Etiqueta NFC", trigger is Trigger.Nfc, Modifier.weight(1f)) {
+            if (trigger !is Trigger.Nfc) onChange(draft.copy(trigger = Trigger.Nfc()))
         }
     }
 
@@ -495,6 +511,16 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
                 }
             }
         }
+        is Trigger.Notification -> Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                NotificationTriggerFields(trigger) { onChange(draft.copy(trigger = it)) }
+            }
+        }
+        is Trigger.Nfc -> Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                NfcTriggerFields(trigger) { onChange(draft.copy(trigger = it)) }
+            }
+        }
         is Trigger.Power -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Choice("Al conectar", trigger.event == PowerEvent.CONNECTED, Modifier.weight(1f)) {
                 onChange(draft.copy(trigger = trigger.copy(event = PowerEvent.CONNECTED)))
@@ -593,6 +619,9 @@ private fun IfStep(context: Context, draft: AutomationDraft, onChange: (Automati
                         when (condition) {
                             is Condition.BatteryLevel -> "Nivel de batería"
                             is Condition.TimeBetween -> "Entre dos horas"
+                            is Condition.WifiConnected -> "Conectado a un Wi-Fi"
+                            is Condition.Charging -> "Cargador"
+                            is Condition.DaysOfWeek -> "Solo ciertos días"
                             else -> "Condición avanzada"
                         },
                         style = MaterialTheme.typography.titleSmall,
@@ -631,6 +660,9 @@ private fun IfStep(context: Context, draft: AutomationDraft, onChange: (Automati
                             Text(timeText(context, condition.end))
                         }
                     }
+                    is Condition.WifiConnected -> WifiConditionFields(condition) { replace(it) }
+                    is Condition.Charging -> ChargingConditionFields(condition) { replace(it) }
+                    is Condition.DaysOfWeek -> DaysConditionFields(condition) { replace(it) }
                     else -> Text("Si ${describe(context, condition)}. Se conserva tal cual; el editor todavía no la cambia.", style = MaterialTheme.typography.bodyMedium)
                 }
             }
@@ -642,6 +674,11 @@ private fun IfStep(context: Context, draft: AutomationDraft, onChange: (Automati
         options = listOf(
             "Nivel de batería" to { onChange(draft.copy(conditions = draft.conditions + Condition.BatteryLevel(Comparison.GREATER_THAN, 20))) },
             "Entre dos horas" to { onChange(draft.copy(conditions = draft.conditions + Condition.TimeBetween("07:00", "22:00"))) },
+            "Conectado a un Wi-Fi" to { onChange(draft.copy(conditions = draft.conditions + Condition.WifiConnected())) },
+            "Cargando o sin cargador" to { onChange(draft.copy(conditions = draft.conditions + Condition.Charging())) },
+            "Solo ciertos días" to {
+                onChange(draft.copy(conditions = draft.conditions + Condition.DaysOfWeek(Weekday.entries.take(5))))
+            },
         ),
     )
 }
@@ -696,22 +733,15 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                             OutlinedTextField(action.title, { replace(action.copy(title = it)) }, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             OutlinedTextField(action.text, { replace(action.copy(text = it)) }, label = { Text("Texto") }, modifier = Modifier.fillMaxWidth())
                             Text("Podés usar %battery (batería), %time (hora) y %date (fecha).", style = MaterialTheme.typography.bodySmall)
+                            if ((context.applicationContext as LaVaraApp).container.actionExecutor.notificationPrefs.onlyErrors) {
+                                Text(
+                                    "Ojo: no se va a ver, porque está encendido \"Solo avisar si algo sale mal\" (menú ☰ → Notificaciones).",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
-                        is Action.Delay -> {
-                            var text by remember(index, action) { mutableStateOf(action.seconds.toString()) }
-                            OutlinedTextField(
-                                value = text,
-                                onValueChange = { new ->
-                                    text = new.filter { it.isDigit() }.take(4)
-                                    text.toLongOrNull()?.let { replace(Action.Delay(it)) }
-                                },
-                                label = { Text("Segundos") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                supportingText = { Text("Máximo ${AutomationDraft.MAX_DELAY_SECONDS} segundos por ahora.") },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
+                        is Action.Delay -> WaitFields(action) { replace(it) }
                         is Action.OpenApp -> {
                             val label = remember(action.packageName) { InstalledApps(context).label(action.packageName) }
                             OutlinedButton(onClick = { pickFor = index }, modifier = Modifier.fillMaxWidth()) {
@@ -853,7 +883,7 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
         label = "+ Agregar acción",
         options = listOf(
             "Mostrar notificación" to { onChange(draft.copy(actions = draft.actions + Action.ShowNotification("La Vara", ""))) },
-            "Esperar unos segundos" to { onChange(draft.copy(actions = draft.actions + Action.Delay(5))) },
+            "Esperar (segundos, minutos u horas)" to { onChange(draft.copy(actions = draft.actions + Action.Delay(5))) },
             "Abrir app" to { pickFor = NEW_ACTION },
             "Abrir enlace" to { onChange(draft.copy(actions = draft.actions + Action.OpenUrl("https://"))) },
             "WhatsApp a un contacto" to { onChange(draft.copy(actions = draft.actions + Action.WhatsAppMessage())) },
@@ -980,7 +1010,7 @@ private fun PermissionHint(action: Action) {
 }
 
 @Composable
-private fun AppIcon(packageName: String, size: Int = 32) {
+internal fun AppIcon(packageName: String, size: Int = 32) {
     val context = LocalContext.current
     val icon = remember(packageName) {
         InstalledApps(context).icon(packageName)?.toBitmap(size * 3, size * 3)?.asImageBitmap()
@@ -991,7 +1021,7 @@ private fun AppIcon(packageName: String, size: Int = 32) {
 
 /** Lista de apps instaladas con buscador: el usuario elige por nombre, sin saber el nombre de paquete. */
 @Composable
-private fun AppPickerDialog(title: String = "¿Qué app abrir?", onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
+internal fun AppPickerDialog(title: String = "¿Qué app abrir?", onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
     val context = LocalContext.current
     val apps by produceState<List<InstalledApp>?>(null) {
         value = withContext(Dispatchers.IO) { InstalledApps(context).launchable() }

@@ -10,6 +10,7 @@ import com.lavara.logging.AppLogger
 import com.lavara.logging.RoomLogger
 import com.lavara.system.AutomationRunner
 import com.lavara.system.alarm.AlarmScheduler
+import com.lavara.system.alarm.LaterAlarms
 import com.lavara.system.device.AndroidActionExecutor
 import com.lavara.system.device.AndroidDeviceState
 import com.lavara.system.device.BatteryOptimization
@@ -46,9 +47,16 @@ class AppContainer(context: Context) {
     val deviceState = AndroidDeviceState(appContext)
     val actionExecutor = AndroidActionExecutor(appContext)
     val batteryOptimization = BatteryOptimization(appContext)
-    val engine by lazy { AutomationEngine(automationRepository, actionExecutor, clock, deviceState) }
+    val engine by lazy { AutomationEngine(automationRepository, actionExecutor, clock, deviceState, later = laterAlarms) }
+    val laterAlarms: LaterAlarms by lazy {
+        LaterAlarms(appContext, settingsRepository, automationRepository, logger, clock) { automationRunner }
+    }
     val automationRunner: AutomationRunner by lazy {
-        AutomationRunner(engine, automationRepository, runRepository, logger) { ids -> unlockQueue.wait(ids) }
+        AutomationRunner(
+            engine, automationRepository, runRepository, logger,
+            onWaitingUnlock = { ids -> unlockQueue.wait(ids) },
+            onFailed = { id, name, reason -> actionExecutor.notifyFailure(id, name, reason) },
+        )
     }
     val unlockQueue: UnlockQueue by lazy {
         UnlockQueue(appContext, settingsRepository, automationRepository, logger, clock, appScope, { automationRunner }) {
@@ -68,6 +76,7 @@ class AppContainer(context: Context) {
         alarmScheduler.reschedule(reason)
         deviceWatcher.sync(reason)
         geofenceSync.sync(reason)
+        laterAlarms.sync(reason)
         // Si quedó algo esperando el desbloqueo (por ejemplo, antes de reiniciar), se sigue esperando.
         if (unlockQueue.hasPending()) UnlockWaitService.start(appContext)
         // Los widgets muestran el nombre de su automatización: se redibujan por si cambió o se borró.

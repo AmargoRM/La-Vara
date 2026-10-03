@@ -14,6 +14,14 @@ class NotificationPrefs(context: Context) {
         get() = prefs.getBoolean("tocar_para_abrir", false)
         set(value) = prefs.edit().putBoolean("tocar_para_abrir", value).apply()
 
+    /**
+     * Solo avisar si algo sale mal (pedido del usuario): la acción "Mostrar notificación" no muestra nada y el
+     * widget no confirma; solo queda un aviso discreto cuando una automatización falla. Encendido por defecto.
+     */
+    var onlyErrors: Boolean
+        get() = prefs.getBoolean("solo_errores", true)
+        set(value) = prefs.edit().putBoolean("solo_errores", value).apply()
+
     /** Las notificaciones de la acción "Mostrar notificación" salen flotando arriba (true) o discretas (false). */
     var floating: Boolean
         get() = prefs.getBoolean("flotantes", true)

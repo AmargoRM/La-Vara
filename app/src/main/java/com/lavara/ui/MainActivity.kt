@@ -31,7 +31,9 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,12 +71,14 @@ class MainActivity : ComponentActivity() {
         val container = (application as LaVaraApp).container
         setContent {
             LaVaraTheme {
-                HomeScreen(
-                    versionLabel = AppInfo.versionLabel(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
-                    container = container,
-                    installRequest = installRequest,
-                    resumeCount = resumeCount,
-                )
+                CompositionLocalProvider(LocalResumeCount provides resumeCount) {
+                    HomeScreen(
+                        versionLabel = AppInfo.versionLabel(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
+                        container = container,
+                        installRequest = installRequest,
+                        resumeCount = resumeCount,
+                    )
+                }
             }
         }
     }
@@ -155,6 +159,9 @@ fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: In
 }
 
 private const val NEW = "__nueva__"
+
+/** Sube cada vez que La Vara vuelve al frente: las pantallas lo usan para volver a revisar permisos. */
+val LocalResumeCount = compositionLocalOf { 0 }
 
 private enum class Tab(val label: String, @DrawableRes val icon: Int) {
     INICIO("Inicio", R.drawable.ic_inicio),

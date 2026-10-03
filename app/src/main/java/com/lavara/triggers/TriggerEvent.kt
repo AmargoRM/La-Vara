@@ -47,6 +47,27 @@ sealed interface TriggerEvent {
         override val dedupKey: String = "wifi:${ssid.orEmpty()}:${if (connected) "connected" else "disconnected"}:$atMillis"
     }
 
+    /**
+     * La app [packageName] mostró una notificación con [title] y [text]. El contenido solo se usa para
+     * comparar; nunca se guarda en los registros. [key] y [postTime] distinguen cada notificación.
+     */
+    data class NotificationPosted(
+        val packageName: String,
+        val title: String,
+        val text: String,
+        val key: String,
+        val postTime: Long,
+    ) : TriggerEvent {
+        override val dedupKey: String = "notification:$packageName:$key:$postTime"
+
+        override fun toString(): String = "NotificationPosted($packageName)"
+    }
+
+    /** Se acercó el teléfono a la etiqueta NFC con el código [tagId]. [requestId] distingue cada toque. */
+    data class NfcTagScanned(val tagId: String, val requestId: String) : TriggerEvent {
+        override val dedupKey: String = "nfc:$requestId"
+    }
+
     /** El usuario pidió ejecutar [automationId] a mano. [requestId] distingue cada pedido. */
     data class ManualRun(val automationId: String, val requestId: String) : TriggerEvent {
         override val dedupKey: String = "manual:$requestId"
@@ -77,6 +98,13 @@ object TriggerMatcher {
             event.connected == (trigger.event == ConnectionEvent.CONNECTED) &&
             (trigger.ssid.isBlank() || trigger.ssid.trim().equals(event.ssid?.trim(), ignoreCase = true))
 
+        is Trigger.Notification -> event is TriggerEvent.NotificationPosted &&
+            (trigger.packageName.isBlank() || trigger.packageName == event.packageName) &&
+            (trigger.textContains.isBlank() || listOf(event.title, event.text).any { it.contains(trigger.textContains.trim(), ignoreCase = true) })
+
+        is Trigger.Nfc -> event is TriggerEvent.NfcTagScanned && trigger.tagId.isNotBlank() &&
+            trigger.tagId.equals(event.tagId, ignoreCase = true)
+
         Trigger.Manual -> false
     } || (event is TriggerEvent.ManualRun && event.automationId == automationId)
 
@@ -92,6 +120,10 @@ object TriggerMatcher {
     /** true si alguna automatización activa necesita que La Vara escuche la batería, el cargador o el Wi-Fi. */
     fun needsDeviceWatch(automations: List<Automation>): Boolean =
         automations.any { it.enabled && (it.trigger is Trigger.Battery || it.trigger is Trigger.Power || it.trigger is Trigger.Wifi) }
+
+    /** true si alguna automatización activa espera notificaciones de otras apps. */
+    fun needsNotificationAccess(automations: List<Automation>): Boolean =
+        automations.any { it.enabled && it.trigger is Trigger.Notification }
 
     private fun Trigger.Time.timeOfDay() = TimeText.parseOrNull(time)!!
 }

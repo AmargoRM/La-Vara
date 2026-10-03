@@ -286,3 +286,15 @@ sealed interface ActionResult {
 fun interface ActionExecutor {
     suspend fun execute(action: Action): ActionResult
 }
+
+/** "30 s", "10 min", "2 h", "1 h 30 min": cuánto dura una espera, para mostrar. */
+fun waitText(seconds: Long): String {
+    val h = seconds / 3600
+    val m = seconds % 3600 / 60
+    val s = seconds % 60
+    return listOfNotNull(
+        if (h > 0) "$h h" else null,
+        if (m > 0) "$m min" else null,
+        if (s > 0 || seconds == 0L) "$s s" else null,
+    ).joinToString(" ")
+}

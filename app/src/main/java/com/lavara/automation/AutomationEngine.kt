@@ -5,6 +5,7 @@ import com.lavara.actions.ActionExecutor
 import com.lavara.actions.ActionResult
 import com.lavara.actions.needsUnlock
 import com.lavara.actions.recipient
+import com.lavara.actions.waitText
 import com.lavara.conditions.ConditionEvaluator
 import com.lavara.core.Clock
 import com.lavara.core.DeviceState
@@ -37,6 +38,11 @@ class AutomationEngine(
     private val executor: ActionExecutor,
     private val clock: Clock,
     private val deviceState: DeviceState,
+    /**
+     * Programa la continuación de una espera larga (más de [INLINE_DELAY_SECONDS]). Si es null, el motor
+     * espera ahí mismo, como antes.
+     */
+    private val later: LaterScheduler? = null,
     /** Espera sin trabar el hilo. Los tests la reemplazan para no esperar de verdad. */
     private val sleep: suspend (millis: Long) -> Unit = { delay(it) },
 ) {
@@ -63,6 +69,28 @@ class AutomationEngine(
             run(automation, event.dedupKey, chain = listOf(automation.id), results)
         }
         return results
+    }
+
+    /**
+     * Sigue una automatización que quedó en una espera larga, desde la acción [fromAction]. No vuelve a
+     * revisar condiciones ni cooldown: eso se revisó cuando arrancó.
+     */
+    suspend fun resume(automationId: String, fromAction: Int): ExecutionResult {
+        val start = nowMillis()
+        val automation = source.find(automationId)
+            ?: return ExecutionResult(automationId, ExecutionStatus.SKIPPED_DISABLED, "La automatización ya no existe", start, 0)
+        if (!automation.enabled) {
+            return ExecutionResult(automationId, ExecutionStatus.SKIPPED_DISABLED, "Se desactivó durante la espera: no sigue", start, 0)
+        }
+        val busy = mutex.withLock {
+            (automation.id in running).also { if (!it) running += automation.id }
+        }
+        if (busy) return ExecutionResult(automationId, ExecutionStatus.SKIPPED_DUPLICATE, "Ya se está ejecutando", start, 0)
+        try {
+            return executeActions(automation, listOf(automation.id), start, mutableListOf(), from = fromAction)
+        } finally {
+            mutex.withLock { running -= automation.id }
+        }
     }
 
     /**
@@ -134,13 +162,25 @@ class AutomationEngine(
         chain: List<String>,
         start: Long,
         results: MutableList<ExecutionResult>,
+        from: Int = 0,
     ): ExecutionResult {
         val variables = Variables.from(clock.now(), deviceState.batteryLevel())
         val records = mutableListOf<ActionRecord>()
         var failedAction: String? = null
         var errorMessage: String? = null
+        var continuesAt: Long? = null
 
         for ((index, action) in automation.actions.withIndex()) {
+            if (index < from) continue
+            // Espera larga: no se queda despierto esperando; el resto sigue con una alarma.
+            if (action is Action.Delay && action.seconds > INLINE_DELAY_SECONDS && later != null) {
+                if (index == automation.actions.lastIndex) break
+                val at = nowMillis() + action.seconds * 1000
+                later.schedule(automation.id, index + 1, at)
+                records += ActionRecord(index, describe(action), 0, true, null)
+                continuesAt = at
+                break
+            }
             val actionStart = nowMillis()
             val outcome = perform(action, variables, chain, results)
             val failure = outcome as? ActionResult.Failure
@@ -160,7 +200,7 @@ class AutomationEngine(
             failedAction == null -> "Se ejecutaron ${records.size} acciones"
             automation.onError == OnError.STOP -> "Falló \"$failedAction\" y se detuvo (onError = stop)"
             else -> "Falló \"$failedAction\" y siguió con las demás (onError = continue)"
-        }
+        } + (continuesAt?.let { "; las demás siguen a las ${clockText(it)}" } ?: "")
         return ExecutionResult(
             automationId = automation.id,
             status = status,
@@ -218,14 +258,23 @@ class AutomationEngine(
 
     private fun nowMillis(): Long = clock.now().toInstant().toEpochMilli()
 
-    private companion object {
-        const val MAX_SEEN_EVENTS = 500
+    private fun clockText(millis: Long): String {
+        val at = java.time.Instant.ofEpochMilli(millis).atZone(clock.now().zone)
+        val day = if (at.toLocalDate() == clock.now().toLocalDate()) "" else " del %02d/%02d".format(at.dayOfMonth, at.monthValue)
+        return "%02d:%02d%s".format(at.hour, at.minute, day)
+    }
 
-        fun describe(action: Action): String = when (action) {
+    companion object {
+        private const val MAX_SEEN_EVENTS = 500
+
+        /** Esperas de hasta este tiempo se hacen ahí mismo; las más largas siguen con una alarma. */
+        const val INLINE_DELAY_SECONDS = 10L
+
+        private fun describe(action: Action): String = when (action) {
             is Action.ShowNotification -> "Mostrar notificación \"${action.title}\""
             is Action.OpenApp -> "Abrir app ${action.packageName}"
             is Action.OpenUrl -> "Abrir enlace ${action.host}"
-            is Action.Delay -> "Esperar ${action.seconds} s"
+            is Action.Delay -> "Esperar ${waitText(action.seconds)}"
             is Action.RunAutomation -> "Ejecutar automatización ${action.automationId}"
             is Action.Flashlight -> if (action.on) "Encender linterna" else "Apagar linterna"
             is Action.SetVolume -> "Volumen de ${action.stream.label} al ${action.percent} %"
