@@ -69,6 +69,19 @@ Al escribir una automatización a mano, alcanza con `id`, `name`, `trigger` y `a
 - `event` (opcional, por defecto `"connected"`): `"connected"` = al enchufar el cargador (cable o base inalámbrica); `"disconnected"` = al desenchufarlo.
 - Se dispara una vez por cada conexión o desconexión.
 
+### `location`: llegar a un lugar o irse de él
+
+```json
+{ "type": "location", "latitude": 9.9281, "longitude": -84.0907, "radiusMeters": 200, "transition": "enter", "placeName": "Casa" }
+```
+
+- `latitude` (obligatorio, -90 a 90) y `longitude` (obligatorio, -180 a 180): centro de la zona, en grados decimales (WGS84, como Google Maps).
+- `radiusMeters` (opcional, por defecto `200`): radio del círculo, de 100 a 50000 metros.
+- `transition` (opcional, por defecto `"enter"`): `"enter"` = al llegar; `"exit"` = al irse.
+- `placeName` (opcional, por defecto `""`): nombre para mostrar, como `"Casa"`.
+- Si el teléfono ya está adentro cuando se guarda, no se dispara hasta salir y volver a entrar.
+- Necesita el permiso de ubicación "Permitir todo el tiempo" y la ubicación del teléfono encendida. Android puede tardar unos minutos en notar la entrada o salida.
+
 ### `manual`: solo a mano
 
 ```json

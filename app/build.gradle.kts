@@ -74,6 +74,11 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
 
+    // Zonas (geocercas) y ubicación actual: Android las vigila sin que La Vara consulte el GPS.
+    implementation(libs.play.services.location)
+    // Mapa de OpenStreetMap para marcar la zona; no necesita clave de API.
+    implementation(libs.osmdroid)
+
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
