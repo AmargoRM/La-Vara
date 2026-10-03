@@ -24,6 +24,7 @@ class GitHubReleaseClient(
         val conn = (url.openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 15_000
+            setRequestProperty("User-Agent", USER_AGENT)
             setRequestProperty("Accept", "application/vnd.github+json")
             setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
             setRequestProperty("Authorization", "Bearer $token")
@@ -58,6 +59,7 @@ class GitHubReleaseClient(
                 instanceFollowRedirects = false
                 connectTimeout = 15_000
                 readTimeout = 30_000
+                setRequestProperty("User-Agent", USER_AGENT)
                 setRequestProperty("Accept", "application/octet-stream")
                 setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
                 setRequestProperty("Authorization", "Bearer $token")
@@ -71,6 +73,7 @@ class GitHubReleaseClient(
                     (URL(location).openConnection() as HttpURLConnection).apply {
                         connectTimeout = 15_000
                         readTimeout = 30_000
+                        setRequestProperty("User-Agent", USER_AGENT)
                     }.also {
                         if (it.responseCode != 200) {
                             val msg = UpdateErrors.forHttpCode(it.responseCode)
@@ -109,5 +112,13 @@ class GitHubReleaseClient(
         } catch (e: IOException) {
             UpdateErrors.NO_NETWORK
         }
+    }
+
+    private companion object {
+        /**
+         * Sin esto, Android manda por su cuenta el modelo del teléfono y la versión de Android
+         * ("Dalvik/2.1.0 (Linux; U; Android 14; motorola edge 50 fusion…)"). GitHub exige un nombre cualquiera.
+         */
+        const val USER_AGENT = "LaVara"
     }
 }
