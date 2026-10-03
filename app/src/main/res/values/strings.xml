@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">La Vara</string>
+    <string name="widget_label">Botón de La Vara</string>
+    <string name="widget_description">Ejecuta una automatización al tocarlo.</string>
     <string name="tap_service_label">La Vara: tocar botones</string>
     <string name="tap_service_description">Permite que tus automatizaciones de La Vara toquen un botón (por ejemplo, Enviar) solo dentro de las apps que elegiste en La Vara. No lee ni guarda nada de las demás apps, ni el texto de la pantalla. Para quitarlo, apagalo aquí.</string>
 </resources>

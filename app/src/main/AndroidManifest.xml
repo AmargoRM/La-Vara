@@ -159,6 +159,48 @@
                 android:value="Escuchar los avisos de batería y cargador para ejecutar las automatizaciones del usuario" />
         </service>
 
+        <!-- Espera corta a que el usuario desbloquee el teléfono para ejecutar lo pendiente. Se apaga sola. -->
+        <service
+            android:name=".system.device.UnlockWaitService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Esperar a que el usuario desbloquee el teléfono para abrir lo que pidió una automatización" />
+        </service>
+
+        <!-- Widget de pantalla de inicio: un botón por automatización. -->
+        <receiver
+            android:name=".ui.widget.AutomationWidget"
+            android:exported="true"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_automation_info" />
+        </receiver>
+
+        <!-- Elegir qué automatización ejecuta el widget. La abre el launcher al agregarlo. -->
+        <activity
+            android:name=".ui.widget.WidgetConfigActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Pantalla invisible que ejecuta la automatización del widget. Al estar a la vista, Android deja
+             abrir apps sin permisos extra. -->
+        <activity
+            android:name=".ui.widget.RunFromWidgetActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.archivos"

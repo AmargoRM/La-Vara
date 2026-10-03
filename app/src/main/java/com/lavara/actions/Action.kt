@@ -222,6 +222,9 @@ fun Action.opensScreen(): Boolean = when (this) {
     else -> false
 }
 
+/** Si la acción necesita el teléfono desbloqueado: abre algo en pantalla o toca botones. */
+fun Action.needsUnlock(): Boolean = opensScreen() || this is Action.TapInApp
+
 /** Si la acción necesita el permiso "Acceso a No molestar" (No molestar o modo silencio). */
 fun Action.needsDndAccess(): Boolean =
     this is Action.DoNotDisturb || (this is Action.SetRingerMode && mode == RingerMode.SILENT)

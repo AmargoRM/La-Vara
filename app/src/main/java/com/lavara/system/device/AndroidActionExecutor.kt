@@ -99,8 +99,11 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         }
     }
 
-    /** Si Android deja a La Vara abrir apps aunque esté en segundo plano (permiso "Mostrar sobre otras apps"). */
-    fun canOpenAppsInBackground(): Boolean = Settings.canDrawOverlays(context)
+    /**
+     * Si Android deja a La Vara abrir apps aunque esté en segundo plano: con "Mostrar sobre otras apps", o con
+     * el permiso de Accesibilidad encendido (Android exime a las apps con un servicio de Accesibilidad activo).
+     */
+    fun canOpenAppsInBackground(): Boolean = Settings.canDrawOverlays(context) || TapService.isEnabled(context)
 
     fun openBackgroundAppsSettings() {
         val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))

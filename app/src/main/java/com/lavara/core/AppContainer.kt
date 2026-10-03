@@ -14,6 +14,9 @@ import com.lavara.system.device.AndroidActionExecutor
 import com.lavara.system.device.AndroidDeviceState
 import com.lavara.system.device.BatteryOptimization
 import com.lavara.system.device.DeviceWatcher
+import com.lavara.system.device.UnlockQueue
+import com.lavara.system.device.UnlockWaitService
+import com.lavara.ui.widget.AutomationWidget
 import com.lavara.system.location.GeofenceSync
 import com.lavara.system.location.LocationAccess
 import com.lavara.system.update.ApkInstaller
@@ -44,7 +47,14 @@ class AppContainer(context: Context) {
     val actionExecutor = AndroidActionExecutor(appContext)
     val batteryOptimization = BatteryOptimization(appContext)
     val engine by lazy { AutomationEngine(automationRepository, actionExecutor, clock, deviceState) }
-    val automationRunner by lazy { AutomationRunner(engine, automationRepository, runRepository, logger) }
+    val automationRunner: AutomationRunner by lazy {
+        AutomationRunner(engine, automationRepository, runRepository, logger) { ids -> unlockQueue.wait(ids) }
+    }
+    val unlockQueue: UnlockQueue by lazy {
+        UnlockQueue(appContext, settingsRepository, automationRepository, logger, clock, appScope, { automationRunner }) {
+            actionExecutor.canOpenAppsInBackground()
+        }
+    }
     val alarmScheduler by lazy { AlarmScheduler(appContext, automationRepository, settingsRepository, logger, clock) }
     val locationAccess = LocationAccess(appContext)
     val geofenceSync by lazy { GeofenceSync(appContext, automationRepository, locationAccess, logger) }
@@ -58,6 +68,10 @@ class AppContainer(context: Context) {
         alarmScheduler.reschedule(reason)
         deviceWatcher.sync(reason)
         geofenceSync.sync(reason)
+        // Si quedó algo esperando el desbloqueo (por ejemplo, antes de reiniciar), se sigue esperando.
+        if (unlockQueue.hasPending()) UnlockWaitService.start(appContext)
+        // Los widgets muestran el nombre de su automatización: se redibujan por si cambió o se borró.
+        AutomationWidget.refreshAll(appContext)
     }
 
     val updateNotifier = UpdateNotifier(appContext)

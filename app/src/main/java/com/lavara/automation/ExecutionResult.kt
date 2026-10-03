@@ -36,6 +36,12 @@ enum class ExecutionStatus {
 
     /** No se ejecutó porque está desactivada (solo al pedirla por RunAutomation o a mano). */
     SKIPPED_DISABLED,
+
+    /**
+     * Abre algo en pantalla y el teléfono estaba bloqueado: queda esperando y se ejecuta entera apenas el
+     * usuario desbloquea (lo hace la parte Android, no el motor).
+     */
+    WAITING_UNLOCK,
 }
 
 /** Una acción hecha: cuál, cuánto tardó y si salió bien. Se guarda como JSON en el historial. */
