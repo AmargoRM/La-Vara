@@ -47,10 +47,10 @@ class AppContainer(context: Context) {
     val actionExecutor = AndroidActionExecutor(appContext)
     val batteryOptimization = BatteryOptimization(appContext)
     val engine by lazy { AutomationEngine(automationRepository, actionExecutor, clock, deviceState) }
-    val automationRunner by lazy {
+    val automationRunner: AutomationRunner by lazy {
         AutomationRunner(engine, automationRepository, runRepository, logger) { ids -> unlockQueue.wait(ids) }
     }
-    val unlockQueue by lazy {
+    val unlockQueue: UnlockQueue by lazy {
         UnlockQueue(appContext, settingsRepository, automationRepository, logger, clock, appScope, { automationRunner }) {
             actionExecutor.canOpenAppsInBackground()
         }
