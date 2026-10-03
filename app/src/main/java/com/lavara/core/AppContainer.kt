@@ -54,7 +54,7 @@ class AppContainer(context: Context) {
     val automationRunner: AutomationRunner by lazy {
         AutomationRunner(
             engine, automationRepository, runRepository, logger,
-            onWaitingUnlock = { ids -> unlockQueue.wait(ids) },
+            onWaitingUnlock = { whole, rest -> unlockQueue.wait(whole, rest) },
             onFailed = { id, name, reason -> actionExecutor.notifyFailure(id, name, reason) },
         )
     }

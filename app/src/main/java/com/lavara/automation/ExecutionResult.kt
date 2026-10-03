@@ -13,6 +13,11 @@ data class ExecutionResult(
     /** Primera acción que falló, en texto, o null. */
     val failedAction: String? = null,
     val errorMessage: String? = null,
+    /**
+     * true si el teléfono estaba bloqueado y solo se hicieron las acciones que no necesitan pantalla: lo que
+     * abre apps o toca botones queda esperando el desbloqueo (ver LockedSplit). No se guarda en el historial.
+     */
+    val waitingUnlock: Boolean = false,
 ) {
     /** true solo si se ejecutó y ninguna acción falló. */
     val success: Boolean get() = status == ExecutionStatus.EXECUTED
