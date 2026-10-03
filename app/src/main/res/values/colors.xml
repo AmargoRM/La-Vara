@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="vara_principal">#0F7C73</color>
+    <!-- Fondo del ícono: el verde de la imagen elegida por el usuario. -->
+    <color name="vara_icono">#08756E</color>
     <color name="fondo">#FAFDFB</color>
 </resources>
