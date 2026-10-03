@@ -36,7 +36,7 @@ data class AutomationDraft(
                     add("La acción ${i + 1} espera más de $MAX_DELAY_SECONDS segundos; por ahora es el máximo.")
                 }
                 is Action.OpenUrl -> if (action.host == "enlace" || !action.host.contains('.')) {
-                    add("La acción ${i + 1} necesita un enlace completo, por ejemplo https://waze.com.")
+                    add("Falta el enlace de la acción ${i + 1}: pegalo en el campo \"Enlace\".")
                 }
                 is Action.OpenApp -> Unit
             }

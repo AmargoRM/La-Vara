@@ -42,7 +42,39 @@ sealed interface Action {
             require(url.startsWith("http://") || url.startsWith("https://")) { "url debe empezar con http:// o https://" }
         }
 
-        val host: String get() = runCatching { java.net.URI(url).host }.getOrNull() ?: "enlace"
+        /** El sitio ("waze.com"), o "enlace" si no se reconoce. Tolera espacios y caracteres raros en el resto. */
+        val host: String get() = HOST.find(url)?.groupValues?.get(1)?.lowercase() ?: "enlace"
+
+        companion object {
+            private val HOST = Regex("^https?://([^/?#:@\\s]+)", RegexOption.IGNORE_CASE)
+            private val SCHEME = Regex("https?://", RegexOption.IGNORE_CASE)
+
+            /**
+             * Convierte lo que el usuario escribió o pegó en un enlace usable, o null si no hay ninguno.
+             * Acepta texto compartido ("Mirá esto https://…"), el https:// repetido al pegar sobre el que ya
+             * estaba, mayúsculas en "HTTPS://" y sitios sin https:// ("waze.com/ul?q=x").
+             */
+            fun normalize(input: String): String? {
+                val text = input.trim()
+                val start = SCHEME.find(text)?.range?.first
+                var candidate = if (start != null) {
+                    text.substring(start).split(Regex("\\s")).first()
+                } else {
+                    text.split(Regex("\\s")).firstOrNull { '.' in it && '@' !in it }?.let { "https://$it" } ?: return null
+                }
+                // "https://https://sitio" al pegar el enlace completo detrás del https:// que traía el campo.
+                while (true) {
+                    val first = SCHEME.find(candidate) ?: break
+                    val rest = candidate.substring(first.range.last + 1)
+                    if (SCHEME.find(rest)?.range?.first == 0) candidate = rest else break
+                }
+                val scheme = SCHEME.find(candidate)!!
+                candidate = scheme.value.lowercase() + candidate.substring(scheme.range.last + 1)
+                candidate = candidate.trimEnd('.', ',', ';', ')', '"', '\'', '>')
+                val host = HOST.find(candidate)?.groupValues?.get(1) ?: return null
+                return if ('.' in host && !host.startsWith('.') && !host.endsWith('.')) candidate else null
+            }
+        }
     }
 
     /** Espera [seconds] segundos antes de la acción siguiente, sin trabar el teléfono. */
