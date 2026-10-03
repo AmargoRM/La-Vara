@@ -103,6 +103,27 @@ Al escribir una automatización a mano, alcanza con `id`, `name`, `trigger` y `a
 - `event` (opcional, por defecto `"connected"`): `"connected"` o `"disconnected"`.
 - Usa la notificación fija "La Vara está activa". Para reconocer la red por nombre hace falta la ubicación "Permitir todo el tiempo".
 
+### `notification`: al llegar una notificación de otra app
+
+```json
+{ "type": "notification", "packageName": "com.whatsapp", "appName": "WhatsApp", "textContains": "llegué" }
+```
+
+- `packageName` (opcional, por defecto `""`): paquete de la app. Vacío = cualquier app (nunca las de La Vara).
+- `appName` (opcional): solo para mostrar.
+- `textContains` (opcional, por defecto `""`): el título o el texto tienen que contenerlo, sin importar mayúsculas. Vacío = cualquier notificación.
+- Necesita el permiso "Acceso a notificaciones". Se ignoran las notificaciones fijas (en curso) y los resúmenes de grupo. El contenido nunca se guarda ni va a los registros.
+
+### `nfc`: al acercar una etiqueta NFC
+
+```json
+{ "type": "nfc", "tagId": "3f9a1c0b7e", "tagName": "Mesa de noche" }
+```
+
+- `tagId` (obligatorio para que funcione): código que La Vara grabó en la etiqueta como `lavara://nfc/<tagId>`. Vacío = no responde a ninguna etiqueta.
+- `tagName` (opcional): solo para mostrar.
+- Android solo lee etiquetas con la pantalla encendida y desbloqueada.
+
 ### `manual`: solo a mano
 
 ```json
@@ -132,6 +153,32 @@ Cualquier automatización, tenga el trigger que tenga, también se puede ejecuta
 
 - `start` (obligatorio) se incluye; `end` (obligatorio) no se incluye.
 - Si `end` es menor que `start`, el rango cruza la medianoche: el ejemplo vale de 22:00 a 05:59.
+
+### `wifi_connected`: conectado a un Wi-Fi
+
+```json
+{ "type": "wifi_connected", "ssid": "Casa" }
+```
+
+- `ssid` (opcional, por defecto `""`): nombre de la red, sin importar mayúsculas. Vacío = cualquier Wi-Fi.
+- Si Android no dice el nombre (falta el permiso de ubicación), solo se cumple con `ssid` vacío.
+
+### `charging`: cargador conectado o no
+
+```json
+{ "type": "charging", "charging": true }
+```
+
+- `charging` (opcional, por defecto `true`): `true` = con el cargador conectado; `false` = sin cargador.
+- Si no se puede leer, no se cumple.
+
+### `days_of_week`: solo ciertos días
+
+```json
+{ "type": "days_of_week", "days": ["monday", "tuesday", "wednesday", "thursday", "friday"] }
+```
+
+- `days` (opcional, por defecto `[]`): días en inglés y minúscula, como en `time`. Lista vacía = cualquier día.
 
 ### `and`: todas
 
@@ -191,7 +238,9 @@ Lista vacía = no se cumple.
 { "type": "delay", "seconds": 30 }
 ```
 
-- `seconds` (obligatorio, ≥ 0). Espera antes de la acción siguiente sin trabar el teléfono.
+- `seconds` (obligatorio, ≥ 0; el editor permite hasta 86400 = 24 horas). Espera antes de la acción siguiente sin trabar el teléfono.
+- Hasta 10 segundos espera ahí mismo. Más de 10 segundos: las acciones siguientes se programan con una alarma exacta y siguen a esa hora, aunque La Vara esté cerrada o el teléfono se reinicie. Si la automatización se desactiva, se borra o se editan sus acciones mientras espera, no sigue.
+- Una espera larga dentro de una automatización llamada con `run_automation` no detiene a la que la llamó.
 
 ### `run_automation`: ejecutar otra automatización
 
@@ -319,6 +368,16 @@ Qué pasa si una acción falla (por ejemplo, la app a abrir no está instalada):
 - `"continue"`: se registra el error y se sigue con la acción siguiente.
 
 En los dos casos la ejecución queda en el historial como fallida, con la acción que falló y el mensaje de error.
+
+## 6b. Archivo de respaldo
+
+El botón "Guardar" del menú ☰ → Respaldo crea un archivo así:
+
+```json
+{ "format": "la-vara-respaldo", "version": 1, "exportedAt": 1791000000000, "automations": [ { "id": "a-1", "name": "…", "trigger": { "type": "manual" } } ] }
+```
+
+"Cargar" acepta ese archivo, una lista de automatizaciones o una sola. Nunca borra ni reemplaza: si ya existe una con el mismo `id` y el mismo contenido, se salta; si existe con cambios, se agrega como copia desactivada con "(importada)" en el nombre. Una automatización que no se entiende no impide cargar las demás.
 
 ## 7. Variables
 

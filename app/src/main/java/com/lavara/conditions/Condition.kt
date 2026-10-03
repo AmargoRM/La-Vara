@@ -1,6 +1,7 @@
 package com.lavara.conditions
 
 import com.lavara.core.TimeText
+import com.lavara.triggers.Weekday
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -38,6 +39,27 @@ sealed interface Condition {
             TimeText.requireValid(end, "end")
         }
     }
+
+    /** El teléfono está conectado a la red Wi-Fi [ssid]. [ssid] vacío = a cualquier Wi-Fi. */
+    @Serializable
+    @SerialName("wifi_connected")
+    data class WifiConnected(
+        val ssid: String = "",
+    ) : Condition
+
+    /** El cargador está conectado ([charging] = true) o desconectado ([charging] = false). */
+    @Serializable
+    @SerialName("charging")
+    data class Charging(
+        val charging: Boolean = true,
+    ) : Condition
+
+    /** Hoy es uno de [days]. Lista vacía = cualquier día. */
+    @Serializable
+    @SerialName("days_of_week")
+    data class DaysOfWeek(
+        val days: List<Weekday> = emptyList(),
+    ) : Condition
 
     /** Todas las condiciones de la lista son ciertas. Lista vacía = cierto. */
     @Serializable

@@ -88,6 +88,30 @@ sealed interface Trigger {
         val event: ConnectionEvent = ConnectionEvent.CONNECTED,
     ) : Trigger
 
+    /**
+     * Cuando otra app muestra una notificación. [packageName] vacío = cualquier app ([appName] es solo para
+     * mostrar). [textContains] vacío = cualquier notificación; si no, el título o el texto tienen que
+     * contenerlo, sin importar mayúsculas. Necesita el permiso "Acceso a notificaciones".
+     */
+    @Serializable
+    @SerialName("notification")
+    data class Notification(
+        val packageName: String = "",
+        val appName: String = "",
+        val textContains: String = "",
+    ) : Trigger
+
+    /**
+     * Al acercar el teléfono a la etiqueta NFC [tagId]. La Vara graba ese código en la etiqueta; [tagName]
+     * es solo para mostrar ("Mesa de noche").
+     */
+    @Serializable
+    @SerialName("nfc")
+    data class Nfc(
+        val tagId: String = "",
+        val tagName: String = "",
+    ) : Trigger
+
     /** Solo se ejecuta a mano (botón, atajo u otra automatización). */
     @Serializable
     @SerialName("manual")

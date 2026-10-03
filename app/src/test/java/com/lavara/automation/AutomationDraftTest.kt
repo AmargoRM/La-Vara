@@ -78,7 +78,7 @@ class AutomationDraftTest {
         assertEquals(1, noTarget.problems().size)
         val self = AutomationDraft.from(Automation(id = "a", name = "A", trigger = Trigger.Manual, actions = listOf(Action.RunAutomation("a"))))
         assertEquals(listOf("La acción 1 se ejecuta a sí misma."), self.problems())
-        val longDelay = AutomationDraft(name = "X", actions = listOf(Action.Delay(11)))
+        val longDelay = AutomationDraft(name = "X", actions = listOf(Action.Delay(24 * 3600 + 1)))
         assertEquals(1, longDelay.problems().size)
         assertEquals(emptyList<String>(), AutomationDraft(name = "X", actions = listOf(Action.Delay(10))).problems())
         assertEquals(1, AutomationDraft(name = "X", actions = listOf(Action.OpenUrl("https://"))).problems().size)

@@ -68,9 +68,9 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 ### S5 — Cierre del MVP
 - [x] Trigger de batería (umbral, cargador conectado/desconectado) por broadcasts.
 - [x] Acción `OpenApp` con selector de apps instaladas (nombre, paquete, ícono) y la solución para abrir apps desde segundo plano descrita en `LIMITES_ANDROID.md`.
-- [ ] Acción `Delay` sin bloquear (corta: dentro de la ejecución; larga: alarma).
-- [ ] Pantalla **Permisos** con semáforo: verde concedido, amarillo opcional, rojo necesario para una automatización existente; cada fila abre su ajuste.
-- [ ] Importar y exportar automatizaciones como archivo JSON (selector de archivos del sistema) y desde el portapapeles.
+- [x] Acción `Delay` sin bloquear (corta: dentro de la ejecución; larga: alarma).
+- [x] Pantalla **Permisos** con semáforo (hecho: tarjeta en el menú ☰ con verde/rojo y botón a cada ajuste): verde concedido, amarillo opcional, rojo necesario para una automatización existente; cada fila abre su ajuste.
+- [x] Importar y exportar automatizaciones como archivo JSON (selector de archivos del sistema). _Falta: desde el portapapeles._
 - **Prueba en el teléfono:** exportar todo, desinstalar en un teléfono de prueba o borrar datos, importar, verificar que todo vuelve.
 
 ---
@@ -78,12 +78,12 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 ## ETAPA 2 — Lo que la vuelve útil (orden por utilidad para el usuario)
 
 - [ ] **S6 Intents de entrada:** otras apps (GPS TICO, Garúa Aforos, atajos del launcher) pueden ejecutar una automatización por nombre o id. Atajos de pantalla de inicio y tile de Ajustes rápidos.
-- [ ] **S7 NFC:** pantalla "Etiquetas NFC" (nombre, UID, última lectura, automatización asociada, contador). Leer UID y NDEF; escribir NDEF propio para que la etiqueta abra La Vara directamente.
+- [ ] **S7 NFC:** _Hecho: disparador por etiqueta grabada por La Vara (`lavara://nfc/<código>`). Falta: pantalla de etiquetas con contador y última lectura._ pantalla "Etiquetas NFC" (nombre, UID, última lectura, automatización asociada, contador). Leer UID y NDEF; escribir NDEF propio para que la etiqueta abra La Vara directamente.
 - [ ] **S8 HTTP + JSON:** `HttpAction` (GET/POST/PUT/PATCH/DELETE, headers, body, timeout), guardar respuesta en variables con rutas JSON, variables personalizadas `%nombre`. Tokens en Android Keystore. Plantilla incluida: disparar un workflow de GitHub (`repository_dispatch`).
 - [ ] **S9 Ubicación y geocercas:** geocercas manuales, entrar/salir/permanecer X minutos. _Hecho: zona marcada en el mapa (OpenStreetMap) con entrar/salir. Falta: permanecer X minutos, GeoJSON y variables._ Fuente de geocercas desde URL GeoJSON (por ejemplo `casos.geojson` de Nube-amarga), refrescada periódicamente, respetando el límite de 100. Variables `%lat`, `%lon`.
 - [ ] **S10 Bitácora de campo:** acción "registrar en bitácora" (hora, punto, automatización, nota) con exportación CSV/GeoJSON.
 - [ ] **S11 Compartir hacia La Vara:** recibir texto, URL, ubicación o imagen desde el menú Compartir y pasarlo como variables a una automatización. Convertir coordenadas a CRTM05 (EPSG:5367).
-- [ ] **S12 Notificaciones entrantes:** `NotificationListenerService` con filtros por app, título y texto.
+- [x] **S12 Notificaciones entrantes:** `NotificationListenerService` con filtros por app y por texto (título o texto).
 - [x] **S13 Bluetooth y Wi-Fi:** conectado/desconectado a un dispositivo emparejado o a una red concreta.
 - [x] **S14 Widget** de pantalla de inicio: botón 1×1 por automatización "a mano", con el ícono de la app que abre (o un emoji según la acción) y su nombre abajo.
 - [ ] **S15 Más acciones del sistema:** vibrar, sonido, volumen, multimedia, abrir URL, abrir ajuste, compartir texto, copiar al portapapeles, brillo (con permiso especial).
@@ -97,6 +97,7 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 
 ## ETAPA 3 — Avanzado
 
+- [x] Condiciones nuevas: conectado a un Wi-Fi, cargando o sin cargador, solo ciertos días.
 - [ ] Evaluador de expresiones seguro (`%battery < 20`, `contains`, operaciones matemáticas), sin ejecutar código arbitrario.
 - [ ] Control de flujo: IF/ELSE, LOOP, WAIT hasta condición con timeout, STOP, RETURN, RunAutomation con protección de ciclos.
 - [ ] Sensores (detectar los disponibles en el teléfono antes de ofrecerlos), movimiento/quietud, proximidad, luz.

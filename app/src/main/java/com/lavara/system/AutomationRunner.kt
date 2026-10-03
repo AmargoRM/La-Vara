@@ -31,7 +31,29 @@ class AutomationRunner(
             return emptyList()
         }
         if (results.isEmpty()) logger.info(SOURCE, "Ninguna automatización activa responde a este evento")
+        record(results)
+        val waiting = results.filter { it.status == ExecutionStatus.WAITING_UNLOCK }.map { it.automationId }
+        if (waiting.isNotEmpty()) onWaitingUnlock(waiting)
+        return results
+    }
 
+    /** Sigue una automatización que estaba en una espera larga, desde la acción [fromAction]. */
+    suspend fun resume(automationId: String, fromAction: Int): ExecutionResult? {
+        val name = automations.find(automationId)?.name ?: automationId
+        logger.info(SOURCE, "Terminó la espera de $name: sigue desde la acción ${fromAction + 1}", automationId)
+        val result = try {
+            engine.resume(automationId, fromAction)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            logger.error(SOURCE, "El motor falló al seguir $name: ${e.message ?: e::class.simpleName}", automationId)
+            return null
+        }
+        record(listOf(result))
+        return result
+    }
+
+    private suspend fun record(results: List<ExecutionResult>) {
         for (result in results) {
             runs.record(result)
             val name = automations.find(result.automationId)?.name ?: result.automationId
@@ -41,9 +63,6 @@ class AutomationRunner(
                 logger.error(SOURCE, "$name: falló \"${action.action}\": ${action.errorMessage}", result.automationId)
             }
         }
-        val waiting = results.filter { it.status == ExecutionStatus.WAITING_UNLOCK }.map { it.automationId }
-        if (waiting.isNotEmpty()) onWaitingUnlock(waiting)
-        return results
     }
 
     private fun describe(event: TriggerEvent): String = when (event) {
@@ -53,6 +72,9 @@ class AutomationRunner(
         is TriggerEvent.LocationChanged -> (if (event.entered) "entrada a la zona de " else "salida de la zona de ") + event.automationId
         is TriggerEvent.BluetoothChanged -> "Bluetooth ${event.name.ifBlank { event.address }} " + if (event.connected) "conectado" else "desconectado"
         is TriggerEvent.WifiChanged -> "Wi-Fi ${event.ssid ?: "(nombre desconocido)"} " + if (event.connected) "conectado" else "desconectado"
+        // Solo la app: el contenido de las notificaciones de otras apps nunca va a los registros.
+        is TriggerEvent.NotificationPosted -> "notificación de ${event.packageName}"
+        is TriggerEvent.NfcTagScanned -> "etiqueta NFC ${event.tagId}"
         is TriggerEvent.ManualRun -> "ejecución manual de ${event.automationId}"
     }
 

@@ -47,6 +47,8 @@ import com.lavara.core.AppContainer
 import com.lavara.triggers.NextAlarm
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.TriggerEvent
+import com.lavara.triggers.TriggerMatcher
+import com.lavara.system.notifications.NotificationWatchService
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -110,6 +112,7 @@ fun AutomationsSection(
                     container.actionExecutor.smsSender.hasPermission(),
                 accessibility = automations.none { a -> a.enabled && a.actions.any { it is Action.TapInApp } } ||
                     TapService.isEnabled(context),
+                notificationAccess = !TriggerMatcher.needsNotificationAccess(automations) || NotificationWatchService.isEnabled(context),
                 location = automations.none { it.enabled && it.trigger is Trigger.Location } ||
                     (container.locationAccess.hasBackground() && container.locationAccess.isLocationOn()),
                 locationOn = container.locationAccess.isLocationOn(),
@@ -164,6 +167,7 @@ fun AutomationsSection(
                 onBrightness = { container.actionExecutor.systemControls.openWriteSettings() },
                 onSms = { container.actionExecutor.smsSender.openAppSettings() },
                 onAccessibility = { TapService.openSettings(context) },
+                onNotificationAccess = { NotificationWatchService.openSettings(context) },
             )
         }
 
@@ -249,6 +253,7 @@ fun AutomationsSection(
                     pendingDelete = null
                     scope.launch {
                         container.automationRepository.delete(automation.id)
+                        container.laterAlarms.cancel(automation.id)
                         container.logger.info("Automatizaciones", "${automation.name}: eliminada", automation.id)
                         container.refreshTriggers("${automation.name}: eliminada")
                         note = "Se eliminó \"${automation.name}\"."
@@ -271,8 +276,10 @@ private data class Health(
     val brightness: Boolean,
     val sms: Boolean,
     val accessibility: Boolean,
+    val notificationAccess: Boolean,
 ) {
-    val allOk get() = notifications && exactAlarms && battery && openApps && location && dnd && brightness && sms && accessibility
+    val allOk get() = notifications && exactAlarms && battery && openApps && location && dnd && brightness && sms && accessibility &&
+        notificationAccess
 }
 
 @Composable
@@ -287,6 +294,7 @@ private fun HealthCard(
     onBrightness: () -> Unit,
     onSms: () -> Unit,
     onAccessibility: () -> Unit,
+    onNotificationAccess: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -348,6 +356,13 @@ private fun HealthCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedButton(onClick = onAccessibility) { Text("Abrir Accesibilidad") }
+            }
+            if (!health.notificationAccess) {
+                Text(
+                    "Una automatización se dispara con notificaciones de otra app y falta \"Acceso a notificaciones\". Activá \"La Vara: disparar con notificaciones\". Si dice \"configuración restringida\": Ajustes → Aplicaciones → La Vara → ⋮ → \"Permitir configuración restringida\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = onNotificationAccess) { Text("Dar acceso a notificaciones") }
             }
         }
     }

@@ -5,6 +5,7 @@ import android.text.format.DateFormat
 import com.lavara.actions.Action
 import com.lavara.actions.DndMode
 import com.lavara.actions.recipient
+import com.lavara.actions.waitText
 import com.lavara.automation.Automation
 import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
@@ -77,12 +78,18 @@ fun describe(context: Context, trigger: Trigger): String = when (trigger) {
         (trigger.deviceName.ifBlank { trigger.deviceAddress }.ifBlank { "de cualquier aparato" })
     is Trigger.Wifi -> (if (trigger.event == ConnectionEvent.CONNECTED) "Al conectarse al Wi-Fi " else "Al desconectarse del Wi-Fi ") +
         trigger.ssid.ifBlank { "(cualquier red)" }
+    is Trigger.Notification -> "Al llegar una notificación de " + trigger.appName.ifBlank { trigger.packageName }.ifBlank { "cualquier app" } +
+        (if (trigger.textContains.isBlank()) "" else " que diga \"${trigger.textContains}\"")
+    is Trigger.Nfc -> "Al tocar la etiqueta NFC " + trigger.tagName.ifBlank { trigger.tagId }.ifBlank { "(sin grabar)" }
     Trigger.Manual -> "Solo al tocarla"
 }
 
 fun describe(context: Context, condition: Condition): String = when (condition) {
     is Condition.BatteryLevel -> "la batería está ${comparisonText(condition.comparison)} ${condition.value} %"
     is Condition.TimeBetween -> "es entre ${timeText(context, condition.start)} y ${timeText(context, condition.end)}"
+    is Condition.WifiConnected -> if (condition.ssid.isBlank()) "estoy conectado a un Wi-Fi" else "estoy conectado al Wi-Fi ${condition.ssid}"
+    is Condition.Charging -> if (condition.charging) "está cargando" else "no está cargando"
+    is Condition.DaysOfWeek -> "es " + daysText(condition.days)
     is Condition.And -> condition.conditions.joinToString(" y ", "(", ")") { describe(context, it) }
     is Condition.Or -> condition.conditions.joinToString(" o ", "(", ")") { describe(context, it) }
     is Condition.Not -> "no ${describe(context, condition.condition)}"
@@ -100,7 +107,7 @@ fun actionTitle(action: Action) = when (action) {
     is Action.ShowNotification -> "Mostrar notificación"
     is Action.OpenApp -> "Abrir app"
     is Action.OpenUrl -> "Abrir enlace"
-    is Action.Delay -> "Esperar"
+    is Action.Delay -> "Esperar ${waitText(action.seconds)}"
     is Action.RunAutomation -> "Ejecutar otra automatización"
     is Action.Flashlight -> if (action.on) "Encender linterna" else "Apagar linterna"
     is Action.SetVolume -> "Volumen de ${action.stream.label} al ${action.percent} %"

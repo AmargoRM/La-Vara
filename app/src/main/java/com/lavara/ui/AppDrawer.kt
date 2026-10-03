@@ -50,8 +50,10 @@ fun AppDrawer(versionLabel: String, container: AppContainer, installRequest: Int
             Text(versionLabel, style = MaterialTheme.typography.bodyMedium)
             EngineSummaryCard(container)
             UpdateSection(container = container, installRequest = installRequest)
+            PermissionsCard(container)
             NotificationsCard(container)
             AllowedAppsCard(container)
+            BackupCard(container)
             HowItWorksCard()
         }
     }
@@ -174,8 +176,8 @@ private fun HowItWorksCard() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Cómo funciona", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
-                "Cada automatización tiene tres partes: cuándo se dispara (hora, batería, cargador, lugar, Bluetooth, Wi-Fi " +
-                    "o a mano), condiciones opcionales y lo que hace (avisar, abrir una app o un enlace, y más).",
+                "Cada automatización tiene tres partes: cuándo se dispara (hora, batería, cargador, lugar, Bluetooth, Wi-Fi, " +
+                    "notificación de otra app, etiqueta NFC o a mano), condiciones opcionales y lo que hace (avisar, abrir una app o un enlace, y más).",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(

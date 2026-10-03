@@ -25,6 +25,8 @@ data class AutomationDraft(
     /** Lo que impide guardar, en palabras para el usuario. Lista vacía = se puede guardar. */
     fun problems(): List<String> = buildList {
         if (name.isBlank()) add("Falta el nombre de la automatización (arriba).")
+        val nfc = trigger
+        if (nfc is Trigger.Nfc && nfc.tagId.isBlank()) add("Falta grabar la etiqueta NFC (paso 1, \"Grabar una etiqueta\").")
         if (actions.isEmpty()) add("Falta al menos una acción en el paso 3.")
         actions.forEachIndexed { i, action ->
             when (action) {
@@ -33,8 +35,8 @@ data class AutomationDraft(
                     action.automationId.isBlank() -> add("La acción ${i + 1} necesita elegir qué automatización ejecutar.")
                     original != null && action.automationId == original.id -> add("La acción ${i + 1} se ejecuta a sí misma.")
                 }
-                is Action.Delay -> if (action.seconds > MAX_DELAY_SECONDS) {
-                    add("La acción ${i + 1} espera más de $MAX_DELAY_SECONDS segundos; por ahora es el máximo.")
+                is Action.Delay -> if (action.seconds > MAX_WAIT_SECONDS) {
+                    add("La acción ${i + 1} espera más de 24 horas; ese es el máximo.")
                 }
                 is Action.OpenUrl -> if (action.host == "enlace" || !action.host.contains('.')) {
                     add("Falta el enlace de la acción ${i + 1}: pegalo en el campo \"Enlace\".")
@@ -56,7 +58,7 @@ data class AutomationDraft(
                     action.packageName.isBlank() -> add("La acción ${i + 1} necesita elegir en qué app tocar.")
                     action.button.isBlank() -> add("La acción ${i + 1} necesita el texto del botón (ej.: Enviar).")
                     action.waitSeconds !in 1..MAX_DELAY_SECONDS.toInt() ->
-                        add("La acción ${i + 1} espera entre 1 y $MAX_DELAY_SECONDS segundos.")
+                        add("La acción ${i + 1} espera entre 1 y $MAX_DELAY_SECONDS segundos a que abra la app.")
                 }
                 is Action.OpenApp, is Action.Flashlight, is Action.SetVolume, is Action.SetRingerMode,
                 is Action.DoNotDisturb, is Action.SetBrightness, is Action.OpenSystemPanel -> Unit
@@ -87,11 +89,14 @@ data class AutomationDraft(
     }
 
     companion object {
-        /**
-         * Espera máxima que ofrece el editor. Cuando suena una alarma, Android da unos 10 segundos para
-         * terminar (ver docs/LIMITES_ANDROID.md); las esperas largas con alarma llegan en S5.
-         */
+        /** Lo máximo que "Tocar un botón" espera a que abra la app. */
         const val MAX_DELAY_SECONDS = 10L
+
+        /**
+         * Espera máxima de la acción "Esperar". Las de más de 10 segundos siguen con una alarma exacta
+         * (ver docs/LIMITES_ANDROID.md), así que no dejan a La Vara despierta.
+         */
+        const val MAX_WAIT_SECONDS = 24 * 3600L
 
         /** Borrador nuevo: a las 08:00 todos los días, con una notificación de ejemplo. */
         fun new() = AutomationDraft(actions = listOf(Action.ShowNotification(title = "La Vara", text = "Son las %time")))

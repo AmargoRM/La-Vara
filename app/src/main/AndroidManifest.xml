@@ -47,6 +47,13 @@
     <!-- Disparador por Wi-Fi: saber a qué red se conectó el teléfono. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- Disparador por etiqueta NFC: leer y grabar etiquetas. Se concede al instalar; no hace falta que el
+         teléfono tenga NFC para instalar La Vara. -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
+
     <!-- Ver las apps que aparecen en el menú de apps, para elegir cuál abrir (Android 11+ lo exige). -->
     <queries>
         <intent>
@@ -102,6 +109,40 @@
         <receiver
             android:name=".system.alarm.AlarmReceiver"
             android:exported="false" />
+
+        <!-- Fin de una espera larga ("Esperar 10 min"): la automatización sigue. -->
+        <receiver
+            android:name=".system.alarm.LaterReceiver"
+            android:exported="false" />
+
+        <!-- Disparador "Al llegar una notificación". Solo funciona si el usuario da "Acceso a notificaciones"
+             en Ajustes; Android exige BIND_NOTIFICATION_LISTENER_SERVICE para conectarse. -->
+        <service
+            android:name=".system.notifications.NotificationWatchService"
+            android:exported="true"
+            android:label="@string/notification_watch_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- Pantalla invisible que abre Android al acercar una etiqueta NFC grabada por La Vara. -->
+        <activity
+            android:name=".system.nfc.NfcTagActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:host="nfc"
+                    android:scheme="lavara" />
+            </intent-filter>
+        </activity>
 
         <!-- Eventos protegidos del sistema: otras apps no pueden enviarlos. -->
         <receiver
