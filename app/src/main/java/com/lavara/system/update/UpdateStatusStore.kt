@@ -9,7 +9,17 @@ data class UpdateStatus(
     val lastMessage: String = "Todavía no se revisó.",
     val available: ReleaseInfo? = null,
     val tokenExpiry: LocalDate? = null,
-)
+) {
+    /**
+     * El estado visto desde la versión instalada. Lo guardado puede ser de antes de actualizar: si decía
+     * "hay una versión nueva" y esa versión (o una más nueva) ya está instalada, ya no se ofrece descargarla.
+     */
+    fun forInstalled(installedVersionCode: Int, installedVersionName: String): UpdateStatus {
+        val release = available ?: return this
+        if (release.versionCode > installedVersionCode) return this
+        return copy(available = null, lastMessage = "Tenés la última versión ($installedVersionName).")
+    }
+}
 
 class UpdateStatusStore(context: Context) {
     private val prefs = context.getSharedPreferences("actualizaciones", Context.MODE_PRIVATE)

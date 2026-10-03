@@ -17,7 +17,8 @@ class UpdateManager(
 ) {
     private val installedVersionCode = BuildConfig.VERSION_CODE
 
-    fun status(): UpdateStatus = statusStore.load()
+    /** El último resultado guardado, sin ofrecer una versión que ya está instalada. */
+    fun status(): UpdateStatus = statusStore.load().forInstalled(installedVersionCode, BuildConfig.VERSION_NAME)
 
     /** Revisa GitHub, guarda el resultado y, si [notify], avisa una sola vez por versión. */
     suspend fun check(notify: Boolean): UpdateStatus {

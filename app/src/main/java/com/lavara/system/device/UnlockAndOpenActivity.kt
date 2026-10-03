@@ -100,7 +100,7 @@ class UnlockAndOpenActivity : Activity() {
         val shown = container().actionExecutor.notifyToOpen(target, name, requestCode = name.hashCode())
         container().logger.warn(
             SOURCE,
-            "No se abrió $name: $why. " + if (shown == null) "Quedó una notificación para abrirlo." else "Tampoco se pudo avisar: $shown",
+            "No se abrió $name: $why. " + if (shown == null) "Quedó una notificación para abrirlo." else "Sin notificación: $shown.",
         )
         finish()
     }
