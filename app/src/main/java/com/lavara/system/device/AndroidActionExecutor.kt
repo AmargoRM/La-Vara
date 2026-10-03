@@ -35,6 +35,7 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
 
     val systemControls = SystemControls(context)
     val smsSender = SmsSender(context)
+    val notificationPrefs = NotificationPrefs(context)
 
     override suspend fun execute(action: Action): ActionResult = when (action) {
         is Action.ShowNotification -> showNotification(action)
@@ -72,18 +73,19 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
-        return notify(action.title, action.text, open)?.let { ActionResult.Failure(it) } ?: ActionResult.Success
+        val channel = if (notificationPrefs.floating) Channel.FLOATING else Channel.QUIET
+        return notify(action.title, action.text, open, channel)?.let { ActionResult.Failure(it) } ?: ActionResult.Success
     }
 
     /** Muestra una notificación. Devuelve null si salió bien, o el motivo si no. */
     // El permiso se comprueba en canNotify(); lint no lo ve porque está en otra función.
     @SuppressLint("MissingPermission")
-    private fun notify(title: String, text: String, onTap: PendingIntent): String? {
+    private fun notify(title: String, text: String, onTap: PendingIntent, channel: Channel): String? {
         if (!canNotify()) return "Falta el permiso de notificaciones. Abrí La Vara y permitilo."
         val manager = NotificationManagerCompat.from(context)
         if (!manager.areNotificationsEnabled()) return "Las notificaciones de La Vara están apagadas en los ajustes de Android."
-        ensureChannel()
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        ensureChannel(channel)
+        val notification = NotificationCompat.Builder(context, channel.id)
             .setSmallIcon(R.drawable.ic_notificacion)
             .setContentTitle(title)
             .setContentText(text)
@@ -196,25 +198,41 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         val shown = notifyToOpen(intent, name, requestCode)
         return ActionResult.Failure(
             "Android no deja abrir $name con La Vara en segundo plano. " +
-                (if (shown == null) "Se mostró una notificación para abrirla. " else "Tampoco se pudo avisar: $shown ") +
-                "Para que se abra sola, permití \"Mostrar sobre otras apps\" en Inicio.",
+                when {
+                    !notificationPrefs.tapToOpen -> ""
+                    shown == null -> "Se mostró una notificación para abrirla. "
+                    else -> "Tampoco se pudo avisar: $shown "
+                } +
+                "Para que se abra sola, permití \"Mostrar sobre otras apps\" o la Accesibilidad de La Vara.",
         )
     }
 
-    /** Notificación "Tocá para abrir". Devuelve null si se mostró, o el motivo si no. */
+    /**
+     * Notificación "Tocá para abrir", discreta (no flota ni suena). Solo si el usuario la activó en el menú ☰.
+     * Devuelve null si se mostró, o el motivo si no.
+     */
     fun notifyToOpen(intent: Intent, name: String, requestCode: Int): String? {
+        if (!notificationPrefs.tapToOpen) return "la notificación \"Tocá para abrir\" está apagada"
         val tap = PendingIntent.getActivity(context, requestCode, intent, PendingIntent.FLAG_IMMUTABLE)
-        return notify("Abrir $name", "Tocá para abrir $name.", tap)
+        return notify("Abrir $name", "Tocá para abrir $name.", tap, Channel.TAP_TO_OPEN)
     }
 
-    private fun ensureChannel() {
-        val channel = NotificationChannel(CHANNEL_ID, "Automatizaciones", NotificationManager.IMPORTANCE_HIGH)
-            .apply { description = "Notificaciones que muestran tus automatizaciones." }
-        context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+    /** Canales de Android: la importancia de un canal no se puede subir después de crearlo, por eso son tres. */
+    private enum class Channel(val id: String, val title: String, val importance: Int, val description: String) {
+        FLOATING("automatizaciones", "Automatizaciones (flotantes)", NotificationManager.IMPORTANCE_HIGH,
+            "Notificaciones de tus automatizaciones que aparecen arriba de la pantalla."),
+        QUIET("automatizaciones_discretas", "Automatizaciones (discretas)", NotificationManager.IMPORTANCE_LOW,
+            "Notificaciones de tus automatizaciones que no flotan ni suenan."),
+        TAP_TO_OPEN("tocar_para_abrir", "Tocá para abrir", NotificationManager.IMPORTANCE_LOW,
+            "Aviso discreto cuando Android no dejó abrir algo solo."),
+    }
+
+    private fun ensureChannel(channel: Channel) {
+        val created = NotificationChannel(channel.id, channel.title, channel.importance).apply { description = channel.description }
+        context.getSystemService(NotificationManager::class.java).createNotificationChannel(created)
     }
 
     private companion object {
-        const val CHANNEL_ID = "automatizaciones"
         const val GOOGLE_MAPS = "com.google.android.apps.maps"
         val WHATSAPP_PACKAGES = listOf("com.whatsapp", "com.whatsapp.w4b")
 

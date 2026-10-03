@@ -11,6 +11,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.layout.Row
@@ -49,6 +50,7 @@ fun AppDrawer(versionLabel: String, container: AppContainer, installRequest: Int
             Text(versionLabel, style = MaterialTheme.typography.bodyMedium)
             EngineSummaryCard(container)
             UpdateSection(container = container, installRequest = installRequest)
+            NotificationsCard(container)
             AllowedAppsCard(container)
             HowItWorksCard()
         }
@@ -82,6 +84,48 @@ private fun EngineSummaryCard(container: AppContainer) {
             )
             Text("Si falta algún permiso, el aviso aparece en Inicio.", style = MaterialTheme.typography.bodySmall)
         }
+    }
+}
+
+/** Qué notificaciones muestra La Vara: las de tus automatizaciones flotantes o discretas, y "Tocá para abrir". */
+@Composable
+private fun NotificationsCard(container: AppContainer) {
+    val prefs = container.actionExecutor.notificationPrefs
+    var floating by remember { mutableStateOf(prefs.floating) }
+    var tapToOpen by remember { mutableStateOf(prefs.tapToOpen) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Notificaciones", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            SwitchRow(
+                "Las de \"Mostrar notificación\" aparecen flotando arriba",
+                if (floating) "Encendido: salen arriba de la pantalla." else "Apagado: llegan discretas, sin flotar ni sonar.",
+                floating,
+            ) {
+                floating = it
+                prefs.floating = it
+                container.logger.info("Notificaciones", "Notificaciones de automatizaciones: ${if (it) "flotantes" else "discretas"}")
+            }
+            SwitchRow(
+                "Avisar \"Tocá para abrir\" si algo no se pudo abrir solo",
+                if (tapToOpen) "Encendido: queda una notificación discreta." else "Apagado: no hay notificación; queda anotado en Historial.",
+                tapToOpen,
+            ) {
+                tapToOpen = it
+                prefs.tapToOpen = it
+                container.logger.info("Notificaciones", "\"Tocá para abrir\": ${if (it) "encendido" else "apagado"}")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, detail: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(detail, style = MaterialTheme.typography.bodySmall)
+        }
+        Switch(checked = checked, onCheckedChange = onChange, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
