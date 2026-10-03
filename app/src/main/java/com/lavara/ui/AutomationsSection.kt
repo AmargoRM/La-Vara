@@ -46,7 +46,6 @@ import com.lavara.triggers.NextAlarm
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.TriggerEvent
 import kotlinx.coroutines.launch
-import java.time.Instant
 import java.util.UUID
 
 private const val KEY_ERRORS_SEEN = "errores_vistos_hasta"
@@ -64,7 +63,6 @@ fun AutomationsSection(
 ) {
     val automations by remember { container.automationRepository.observeAll() }.collectAsState(initial = emptyList())
     val runs by remember { container.runRepository.observeLatest(100) }.collectAsState(initial = emptyList())
-    val nextAlarm by container.alarmScheduler.next.collectAsState()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var note by remember { mutableStateOf<String?>(null) }
@@ -114,7 +112,6 @@ fun AutomationsSection(
 
         val now = container.clock.now()
         val nowMillis = now.toInstant().toEpochMilli()
-        val lastRun = runs.firstOrNull { it.status == ExecutionStatus.EXECUTED.name || it.status == ExecutionStatus.FAILED.name }
         val recentErrors = runs.count {
             it.status == ExecutionStatus.FAILED.name && nowMillis - it.startedAt < 24 * 3_600_000L && it.startedAt > errorsSeenAt
         }
@@ -123,29 +120,6 @@ fun AutomationsSection(
         fun markErrorsSeen() {
             errorsSeenAt = nowMillis
             scope.launch { container.settingsRepository.set(KEY_ERRORS_SEEN, nowMillis.toString()) }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    if (health.allOk) "El motor está listo" else "El motor funciona, pero faltan permisos (abajo)",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text("${automations.size} automatizaciones · ${automations.count { it.enabled }} activas", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Última ejecución: " + (lastRun?.let {
-                        val mark = if (it.status == ExecutionStatus.EXECUTED.name) "✓" else "✗"
-                        "${whenText(context, Instant.ofEpochMilli(it.startedAt).atZone(now.zone), now)} · ${it.automationName} $mark"
-                    } ?: "todavía ninguna"),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    nextAlarm?.let { "Próxima alarma: ${whenText(context, Instant.ofEpochMilli(it).atZone(now.zone), now)}" }
-                        ?: "No hay alarmas programadas.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
         }
 
         if (recentErrors > 0) {
