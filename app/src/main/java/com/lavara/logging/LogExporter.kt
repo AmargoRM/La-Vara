@@ -51,6 +51,7 @@ object LogExporter {
         ExecutionStatus.SKIPPED_COOLDOWN -> "no se ejecutó (cooldown)"
         ExecutionStatus.SKIPPED_DUPLICATE -> "no se ejecutó (repetido)"
         ExecutionStatus.SKIPPED_DISABLED -> "no se ejecutó (desactivada)"
+        ExecutionStatus.WAITING_UNLOCK -> "espera el desbloqueo"
         null -> status
     }
 }

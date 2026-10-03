@@ -261,4 +261,27 @@ class AutomationEngineTest {
         assertTrue(TriggerMatcher.needsDeviceWatch(listOf(automation("hora"), automation("carga", trigger = Trigger.Power()))))
         assertTrue(TriggerMatcher.needsDeviceWatch(listOf(automation("baja", trigger = Trigger.Battery(15, BatteryDirection.BELOW)))))
     }
+
+    @Test
+    fun bloqueado_abrirAppEsperaElDesbloqueoYNotificarNo() = runBlocking {
+        device.locked = true
+        val notify = Action.ShowNotification("Hola")
+        val abre = automation("abre", actions = listOf(notify, openApp))
+        val avisa = automation("avisa", actions = listOf(notify))
+        val executor = RecordingExecutor()
+        val engine = engine(ListSource(listOf(abre, avisa)), executor)
+        val results = engine.handle(at8())
+
+        assertEquals(ExecutionStatus.WAITING_UNLOCK, results.first { it.automationId == "abre" }.status)
+        assertEquals(ExecutionStatus.EXECUTED, results.first { it.automationId == "avisa" }.status)
+        assertEquals(listOf<Action>(notify), executor.done)
+        // El mismo evento no la vuelve a poner en espera.
+        assertEquals(ExecutionStatus.SKIPPED_DUPLICATE, engine.handle(at8()).first { it.automationId == "abre" }.status)
+
+        // Al desbloquear, la parte Android la pide a mano y corre entera.
+        device.locked = false
+        val replay = engine.handle(TriggerEvent.ManualRun("abre", "desbloqueo-1"))
+        assertEquals(ExecutionStatus.EXECUTED, replay.single().status)
+        assertEquals(listOf<Action>(notify, notify, openApp), executor.done)
+    }
 }

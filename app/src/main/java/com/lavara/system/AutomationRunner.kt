@@ -17,6 +17,8 @@ class AutomationRunner(
     private val automations: AutomationRepository,
     private val runs: RunRepository,
     private val logger: AppLogger,
+    /** Recibe las automatizaciones que quedaron esperando el desbloqueo. */
+    private val onWaitingUnlock: suspend (List<String>) -> Unit = {},
 ) {
     suspend fun handle(event: TriggerEvent): List<ExecutionResult> {
         logger.info(SOURCE, "Evento: ${describe(event)}")
@@ -39,6 +41,8 @@ class AutomationRunner(
                 logger.error(SOURCE, "$name: falló \"${action.action}\": ${action.errorMessage}", result.automationId)
             }
         }
+        val waiting = results.filter { it.status == ExecutionStatus.WAITING_UNLOCK }.map { it.automationId }
+        if (waiting.isNotEmpty()) onWaitingUnlock(waiting)
         return results
     }
 

@@ -3,6 +3,7 @@ package com.lavara.automation
 import com.lavara.actions.Action
 import com.lavara.actions.ActionExecutor
 import com.lavara.actions.ActionResult
+import com.lavara.actions.needsUnlock
 import com.lavara.actions.recipient
 import com.lavara.conditions.ConditionEvaluator
 import com.lavara.core.Clock
@@ -86,6 +87,13 @@ class AutomationEngine(
 
         val check = evaluator.check(automation.conditions)
         if (!check.passed) return skipped(ExecutionStatus.SKIPPED_CONDITIONS, check.reason)
+
+        // Abrir apps o tocar botones con el teléfono bloqueado no sirve: se ejecuta entera al desbloquear.
+        // No cuenta para el cooldown; el mismo evento no la vuelve a poner en espera.
+        if (dedupKey != null && automation.actions.any { it.needsUnlock() } && deviceState.isLocked()) {
+            mutex.withLock { remember("${automation.id}|$dedupKey") }
+            return skipped(ExecutionStatus.WAITING_UNLOCK, "El teléfono está bloqueado: se ejecuta apenas lo desbloquees")
+        }
 
         mutex.withLock {
             running += automation.id

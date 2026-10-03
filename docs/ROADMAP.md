@@ -85,12 +85,13 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - [ ] **S11 Compartir hacia La Vara:** recibir texto, URL, ubicación o imagen desde el menú Compartir y pasarlo como variables a una automatización. Convertir coordenadas a CRTM05 (EPSG:5367).
 - [ ] **S12 Notificaciones entrantes:** `NotificationListenerService` con filtros por app, título y texto.
 - [x] **S13 Bluetooth y Wi-Fi:** conectado/desconectado a un dispositivo emparejado o a una red concreta.
-- [ ] **S14 Widget** de pantalla de inicio con automatizaciones favoritas.
+- [x] **S14 Widget** de pantalla de inicio: botón 1×1 por automatización "a mano", con el ícono de la app que abre (o un emoji según la acción) y su nombre abajo.
 - [ ] **S15 Más acciones del sistema:** vibrar, sonido, volumen, multimedia, abrir URL, abrir ajuste, compartir texto, copiar al portapapeles, brillo (con permiso especial).
   - [x] Primera parte: linterna, volumen, modo de sonido, No molestar, brillo y abrir el interruptor de Wi-Fi, datos, Bluetooth, ubicación, NFC y modo avión.
 - [ ] **S15b Acciones dentro de otras apps** (pedido del usuario, 2026-10-03):
   - [x] Abrir WhatsApp en el chat de un contacto con el mensaje escrito, llamar a un número (marcador) y navegar con Waze o Google Maps.
   - [x] Enviar SMS sin tocar, con permiso bajo demanda.
+  - [x] Con el teléfono bloqueado, la automatización que abre algo espera el desbloqueo y corre entera al desbloquear (sin notificación "Tocá para abrir").
   - [x] Tocar botones dentro de otras apps con Accesibilidad, limitado a una lista de apps elegidas por el usuario (OK del usuario el 2026-10-03).
 - [ ] **S16 Archivos:** crear, escribir, añadir, leer, copiar, mover, eliminar, existe, dentro de carpetas que el usuario elija (Storage Access Framework).
 

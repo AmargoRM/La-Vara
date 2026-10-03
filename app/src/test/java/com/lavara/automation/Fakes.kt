@@ -16,8 +16,9 @@ class FakeClock(var current: ZonedDateTime = ZonedDateTime.of(2026, 10, 5, 8, 0,
     }
 }
 
-class FakeDevice(var battery: Int? = 50) : DeviceState {
+class FakeDevice(var battery: Int? = 50, var locked: Boolean = false) : DeviceState {
     override fun batteryLevel(): Int? = battery
+    override fun isLocked(): Boolean = locked
 }
 
 /** Anota las acciones recibidas; falla las que estén en [failing]. */
