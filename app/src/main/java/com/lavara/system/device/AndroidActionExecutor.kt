@@ -35,6 +35,7 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
 
     val systemControls = SystemControls(context)
     val smsSender = SmsSender(context)
+    private val extra = ExtraActions(context)
     val notificationPrefs = NotificationPrefs(context)
 
     override suspend fun execute(action: Action): ActionResult = when (action) {
@@ -60,8 +61,16 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         is Action.Navigate -> navigate(action)
         is Action.SendSms -> smsSender.send(action)
         is Action.TapInApp -> tapInApp(action)
-        // Delay y RunAutomation los resuelve el motor; no deberían llegar acá.
-        is Action.Delay, is Action.RunAutomation -> ActionResult.Failure("El motor no pasó esta acción al ejecutor")
+        is Action.Vibrate -> extra.vibrate(action)
+        is Action.CopyToClipboard -> extra.copy(action)
+        is Action.MediaControl -> extra.media(action)
+        is Action.ShareText -> start(
+            Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, action.text), "Compartir"),
+            "el menú Compartir",
+            requestCode = 7100,
+        )
+        // Delay, RunAutomation y "si" los resuelve el motor los resuelve el motor; no deberían llegar acá.
+        is Action.Delay, is Action.RunAutomation, is Action.IfElse -> ActionResult.Failure("El motor no pasó esta acción al ejecutor")
     }
 
     fun canNotify(): Boolean =
@@ -70,12 +79,12 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
             PackageManager.PERMISSION_GRANTED
 
     private fun showNotification(action: Action.ShowNotification): ActionResult {
-        // Con "Solo avisar si algo sale mal" la acción se da por hecha sin mostrar nada.
-        if (notificationPrefs.onlyErrors) return ActionResult.Success
+        // Con el interruptor apagado, la acción se da por hecha sin mostrar nada.
+        if (!notificationPrefs.showOwn) return ActionResult.Success
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
-        val channel = if (notificationPrefs.floating) Channel.FLOATING else Channel.QUIET
+        val channel = Channel.QUIET
         return notify(action.title, action.text, open, channel)?.let { ActionResult.Failure(it) } ?: ActionResult.Success
     }
 
@@ -108,7 +117,7 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
      * reemplaza al anterior en vez de acumularse. No se muestra si La Vara está a la vista.
      */
     fun notifyFailure(automationId: String, name: String, reason: String) {
-        if (isInForeground()) return
+        if (!notificationPrefs.notifyErrors || isInForeground()) return
         val open = PendingIntent.getActivity(
             context, 1, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
@@ -233,8 +242,6 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
 
     /** Canales de Android: la importancia de un canal no se puede subir después de crearlo, por eso son tres. */
     private enum class Channel(val id: String, val title: String, val importance: Int, val description: String) {
-        FLOATING("automatizaciones", "Automatizaciones (flotantes)", NotificationManager.IMPORTANCE_HIGH,
-            "Notificaciones de tus automatizaciones que aparecen arriba de la pantalla."),
         QUIET("automatizaciones_discretas", "Automatizaciones (discretas)", NotificationManager.IMPORTANCE_LOW,
             "Notificaciones de tus automatizaciones que no flotan ni suenan."),
         TAP_TO_OPEN("tocar_para_abrir", "Tocá para abrir", NotificationManager.IMPORTANCE_LOW,

@@ -79,6 +79,7 @@ Al escribir una automatización a mano, alcanza con `id`, `name`, `trigger` y `a
 - `radiusMeters` (opcional, por defecto `200`): radio del círculo, de 100 a 50000 metros.
 - `transition` (opcional, por defecto `"enter"`): `"enter"` = al llegar; `"exit"` = al irse.
 - `placeName` (opcional, por defecto `""`): nombre para mostrar, como `"Casa"`.
+- `dwellMinutes` (opcional, por defecto `0`, de 0 a 240): solo con `"enter"`. Si es mayor que 0, se dispara cuando el teléfono lleva ese tiempo adentro de la zona, no al entrar. Con `"exit"` se ignora.
 - Si el teléfono ya está adentro cuando se guarda, no se dispara hasta salir y volver a entrar.
 - Necesita el permiso de ubicación "Permitir todo el tiempo" y la ubicación del teléfono encendida. Android puede tardar unos minutos en notar la entrada o salida.
 
@@ -360,6 +361,54 @@ Lista vacía = no se cumple.
 - `waitSeconds` (por defecto 5, de 1 a 10): cuánto espera a que la app y el botón aparezcan.
 - Necesita el permiso de Accesibilidad encendido y el teléfono desbloqueado con la app a la vista. Va después de la acción que abre la app (por ejemplo, `whatsapp_message` y luego `tap_in_app`).
 - En los registros solo aparece el botón que se pidió, nunca lo que hay en la pantalla.
+
+### `vibrate`: vibrar
+
+```json
+{ "type": "vibrate", "millis": 500 }
+```
+
+- `millis` (por defecto 500, de 1 a 10000): cuánto vibra, en milisegundos. No pide permisos especiales.
+
+### `copy_to_clipboard`: copiar un texto
+
+```json
+{ "type": "copy_to_clipboard", "text": "Llegué a las %time" }
+```
+
+- `text` (obligatorio, acepta variables): lo que queda copiado. Nunca se escribe en los registros.
+
+### `share_text`: abrir el menú Compartir con un texto
+
+```json
+{ "type": "share_text", "text": "Ya voy en camino" }
+```
+
+- `text` (obligatorio, acepta variables). Abre el menú Compartir de Android para elegir a qué app mandarlo. Como abre una pantalla, con el teléfono bloqueado espera el desbloqueo.
+
+### `media_control`: controlar la música
+
+```json
+{ "type": "media_control", "command": "play_pause" }
+```
+
+- `command` (por defecto `"play_pause"`): `"play_pause"`, `"play"`, `"pause"`, `"next"` o `"previous"`. Funciona con la app que esté sonando, como los botones de los audífonos.
+
+### `if`: si… / si no…
+
+```json
+{ "type": "if",
+  "conditions": [ { "type": "charging", "charging": true } ],
+  "matchAll": true,
+  "then": [ { "type": "flashlight", "on": true } ],
+  "otherwise": [ { "type": "vibrate", "millis": 300 } ] }
+```
+
+- `conditions` (por defecto `[]`): las mismas condiciones de la sección 4. Lista vacía = se cumple.
+- `matchAll` (por defecto `true`): `true` = tienen que cumplirse todas; `false` = basta con una.
+- `then` (por defecto `[]`): acciones si se cumple. `otherwise` (por defecto `[]`): acciones si no.
+- Dentro de `then` y `otherwise` las esperas (`delay`) son de 10 segundos como máximo; más largas fallan.
+- El historial dice qué camino tomó ("→ se cumple" o "→ no se cumple").
 
 
 Qué pasa si una acción falla (por ejemplo, la app a abrir no está instalada):

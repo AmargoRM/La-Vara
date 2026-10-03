@@ -2,6 +2,7 @@ package com.lavara.automation
 
 import com.lavara.actions.Action
 import com.lavara.actions.Phone
+import com.lavara.actions.flatten
 import com.lavara.conditions.Condition
 import com.lavara.triggers.Trigger
 
@@ -24,54 +25,66 @@ data class AutomationDraft(
 ) {
     /** Lo que impide guardar, en palabras para el usuario. Lista vacía = se puede guardar. */
     fun problems(): List<String> = buildList {
-        if (name.isBlank()) add("Falta el nombre de la automatización (arriba).")
         val nfc = trigger
         if (nfc is Trigger.Nfc && nfc.tagId.isBlank()) add("Falta grabar la etiqueta NFC (paso 1, \"Grabar una etiqueta\").")
         if (actions.isEmpty()) add("Falta al menos una acción en el paso 3.")
-        actions.forEachIndexed { i, action ->
-            when (action) {
-                is Action.ShowNotification -> if (action.title.isBlank()) add("La acción ${i + 1} necesita un título.")
-                is Action.RunAutomation -> when {
-                    action.automationId.isBlank() -> add("La acción ${i + 1} necesita elegir qué automatización ejecutar.")
-                    original != null && action.automationId == original.id -> add("La acción ${i + 1} se ejecuta a sí misma.")
-                }
-                is Action.Delay -> if (action.seconds > MAX_WAIT_SECONDS) {
-                    add("La acción ${i + 1} espera más de 24 horas; ese es el máximo.")
-                }
-                is Action.OpenUrl -> if (action.host == "enlace" || !action.host.contains('.')) {
-                    add("Falta el enlace de la acción ${i + 1}: pegalo en el campo \"Enlace\".")
-                }
-                is Action.WhatsAppMessage -> when {
-                    action.phone.none { it.isDigit() } -> add("La acción ${i + 1} necesita un número o un contacto.")
-                    !Phone.hasCountryCode(action.phone) ->
-                        add("El número de la acción ${i + 1} necesita el código de país adelante (506 para Costa Rica).")
-                }
-                is Action.SendSms -> when {
-                    action.phone.count { it.isDigit() } < 3 -> add("La acción ${i + 1} necesita un número o un contacto.")
-                    action.text.isBlank() -> add("La acción ${i + 1} necesita el texto del SMS.")
-                }
-                is Action.DialNumber -> if (action.phone.count { it.isDigit() } < 3) {
-                    add("La acción ${i + 1} necesita un número o un contacto.")
-                }
-                is Action.Navigate -> if (action.destination.isBlank()) add("La acción ${i + 1} necesita el destino.")
-                is Action.TapInApp -> when {
-                    action.packageName.isBlank() -> add("La acción ${i + 1} necesita elegir en qué app tocar.")
-                    action.button.isBlank() -> add("La acción ${i + 1} necesita el texto del botón (ej.: Enviar).")
-                    action.waitSeconds !in 1..MAX_DELAY_SECONDS.toInt() ->
-                        add("La acción ${i + 1} espera entre 1 y $MAX_DELAY_SECONDS segundos a que abra la app.")
-                }
-                is Action.OpenApp, is Action.Flashlight, is Action.SetVolume, is Action.SetRingerMode,
-                is Action.DoNotDisturb, is Action.SetBrightness, is Action.OpenSystemPanel -> Unit
+        actions.forEachIndexed { i, action -> addAll(problemsOf(action, "La acción ${i + 1}", insideIf = false)) }
+    }
+
+    /** Problemas de una acción; [label] es "La acción 3" o "La acción 3 (si se cumple, 2)". */
+    private fun problemsOf(action: Action, label: String, insideIf: Boolean): List<String> = buildList {
+        when (action) {
+            is Action.ShowNotification -> if (action.title.isBlank()) add("$label necesita un título.")
+            is Action.RunAutomation -> when {
+                action.automationId.isBlank() -> add("$label necesita elegir qué automatización ejecutar.")
+                original != null && action.automationId == original.id -> add("$label se ejecuta a sí misma.")
             }
+            is Action.Delay -> when {
+                insideIf && action.seconds > MAX_DELAY_SECONDS ->
+                    add("$label: dentro de un \"si\" la espera máxima es de $MAX_DELAY_SECONDS segundos.")
+                action.seconds > MAX_WAIT_SECONDS -> add("$label espera más de 24 horas; ese es el máximo.")
+            }
+            is Action.OpenUrl -> if (action.host == "enlace" || !action.host.contains('.')) {
+                add("Falta el enlace de ${label.lowercase()}: pegalo en el campo \"Enlace\".")
+            }
+            is Action.WhatsAppMessage -> when {
+                action.phone.none { it.isDigit() } -> add("$label necesita un número o un contacto.")
+                !Phone.hasCountryCode(action.phone) ->
+                    add("El número de ${label.lowercase()} necesita el código de país adelante (506 para Costa Rica).")
+            }
+            is Action.SendSms -> when {
+                action.phone.count { it.isDigit() } < 3 -> add("$label necesita un número o un contacto.")
+                action.text.isBlank() -> add("$label necesita el texto del SMS.")
+            }
+            is Action.DialNumber -> if (action.phone.count { it.isDigit() } < 3) add("$label necesita un número o un contacto.")
+            is Action.Navigate -> if (action.destination.isBlank()) add("$label necesita el destino.")
+            is Action.TapInApp -> when {
+                action.packageName.isBlank() -> add("$label necesita elegir en qué app tocar.")
+                action.button.isBlank() -> add("$label necesita el texto del botón (ej.: Enviar).")
+                action.waitSeconds !in 1..MAX_DELAY_SECONDS.toInt() ->
+                    add("$label espera entre 1 y $MAX_DELAY_SECONDS segundos a que abra la app.")
+            }
+            is Action.CopyToClipboard -> if (action.text.isBlank()) add("$label necesita el texto a copiar.")
+            is Action.ShareText -> if (action.text.isBlank()) add("$label necesita el texto a compartir.")
+            is Action.IfElse -> {
+                if (action.then.isEmpty() && action.otherwise.isEmpty()) add("$label (\"si\") no tiene acciones adentro.")
+                action.then.forEachIndexed { j, inner -> addAll(problemsOf(inner, "$label (si se cumple, ${j + 1})", insideIf = true)) }
+                action.otherwise.forEachIndexed { j, inner -> addAll(problemsOf(inner, "$label (si no, ${j + 1})", insideIf = true)) }
+            }
+            is Action.OpenApp, is Action.Flashlight, is Action.SetVolume, is Action.SetRingerMode,
+            is Action.DoNotDisturb, is Action.SetBrightness, is Action.OpenSystemPanel, is Action.Vibrate, is Action.MediaControl -> Unit
         }
     }
+
+    /** Nombre que se usa si el usuario no escribe ninguno: dice cuándo se dispara y qué hace. */
+    fun autoName(): String = AutoName.of(trigger, actions)
 
     /** La automatización lista para guardar. [newId] se usa solo si es nueva; [now] en milisegundos. */
     fun toAutomation(newId: String, now: Long): Automation {
         val savedConditions = if (matchAll || conditions.isEmpty()) conditions else listOf(Condition.Or(conditions))
         val base = original ?: Automation(id = newId, name = name, trigger = trigger, createdAt = now)
         return base.copy(
-            name = name.trim(),
+            name = name.trim().ifBlank { autoName() },
             trigger = trigger,
             conditions = savedConditions,
             actions = actions,
@@ -131,7 +144,7 @@ data class AutomationDraft(
 
         /** Nombres de las automatizaciones que ejecutan a [id] con `run_automation`. */
         fun usersOf(id: String, all: List<Automation>): List<String> =
-            all.filter { other -> other.id != id && other.actions.any { it is Action.RunAutomation && it.automationId == id } }
+            all.filter { other -> other.id != id && other.actions.flatMap { it.flatten() }.any { it is Action.RunAutomation && it.automationId == id } }
                 .map { it.name }
     }
 }

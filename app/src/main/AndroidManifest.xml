@@ -47,6 +47,9 @@
     <!-- Disparador por Wi-Fi: saber a qué red se conectó el teléfono. -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
+    <!-- Acción "Vibrar". Se concede al instalar. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- Disparador por etiqueta NFC: leer y grabar etiquetas. Se concede al instalar; no hace falta que el
          teléfono tenga NFC para instalar La Vara. -->
     <uses-permission android:name="android.permission.NFC" />

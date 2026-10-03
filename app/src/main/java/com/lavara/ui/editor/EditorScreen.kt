@@ -68,6 +68,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lavara.actions.Action
+import com.lavara.actions.MediaCommand
 import com.lavara.actions.DndMode
 import com.lavara.actions.NavigationApp
 import com.lavara.actions.RingerMode
@@ -145,22 +146,21 @@ fun EditorScreen(container: AppContainer, automationId: String?, onClose: () -> 
             Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { close() }) { Text("✕", fontSize = 22.sp) }
                 Text(
-                    if (current.original == null) "Nueva automatización" else current.name.ifBlank { "Sin nombre" },
+                    if (current.original == null) "Nueva automatización" else current.name.ifBlank { current.autoName() },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
             }
-            // El nombre se ve en el paso 1 y, si sigue vacío, también en el 3, para poder guardar sin volver.
-            if (step == 0 || (step == 2 && current.name.isBlank())) {
-                OutlinedTextField(
-                    value = current.name,
-                    onValueChange = { draft = current.copy(name = it) },
-                    label = { Text("Nombre de la automatización") },
-                    isError = step == 2,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                )
-            }
+            // El nombre está en los tres pasos. Si queda vacío, se guarda con un nombre automático.
+            OutlinedTextField(
+                value = current.name,
+                onValueChange = { draft = draft?.copy(name = it) },
+                label = { Text("Nombre (opcional)") },
+                placeholder = { Text(current.autoName()) },
+                supportingText = { if (current.name.isBlank()) Text("Si lo dejás vacío, se llama: ${current.autoName()}") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
             StepIndicator(step, Modifier.padding(16.dp))
 
             Column(
@@ -415,6 +415,17 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
                         onChange(draft.copy(trigger = trigger.copy(transition = LocationTransition.EXIT)))
                     }
                 }
+                if (trigger.transition == LocationTransition.ENTER) {
+                    OptionPicker(listOf(0, 5, 10, 15, 30, 60, 120), trigger.dwellMinutes, {
+                        if (it == 0) "Apenas llego" else "Si me quedo $it minutos"
+                    }) { onChange(draft.copy(trigger = trigger.copy(dwellMinutes = it))) }
+                    if (trigger.dwellMinutes > 0) {
+                        Text(
+                            "Se dispara recién después de estar ${trigger.dwellMinutes} minutos adentro. Si te vas antes, no pasa nada.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
                 Text(
                     "Zona: círculo de ${trigger.radiusMeters} m alrededor de %.5f, %.5f.".format(trigger.latitude, trigger.longitude),
                     style = MaterialTheme.typography.bodyMedium,
@@ -601,17 +612,31 @@ private fun IfStep(context: Context, draft: AutomationDraft, onChange: (Automati
         Text("¿Qué tiene que cumplirse?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
         Text("Opcional. Sin condiciones, se ejecuta siempre.", style = MaterialTheme.typography.bodyMedium)
     }
-    if (draft.conditions.size > 1) {
+    ConditionList(context, draft.conditions, draft.matchAll, "Se ejecuta si se cumplen") { conditions, all ->
+        onChange(draft.copy(conditions = conditions, matchAll = all))
+    }
+}
+
+/** Lista de condiciones con "todas" o "alguna", sus campos y el botón para agregar. */
+@Composable
+internal fun ConditionList(
+    context: Context,
+    conditions: List<Condition>,
+    matchAll: Boolean,
+    label: String,
+    onChange: (List<Condition>, Boolean) -> Unit,
+) {
+    if (conditions.size > 1) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Se ejecuta si se cumplen", style = MaterialTheme.typography.bodyMedium)
-            Choice("todas", draft.matchAll) { onChange(draft.copy(matchAll = true)) }
-            Choice("alguna", !draft.matchAll) { onChange(draft.copy(matchAll = false)) }
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Choice("todas", matchAll) { onChange(conditions, true) }
+            Choice("alguna", !matchAll) { onChange(conditions, false) }
         }
     }
 
-    draft.conditions.forEachIndexed { index, condition ->
-        fun replace(new: Condition) = onChange(draft.copy(conditions = draft.conditions.toMutableList().also { it[index] = new }))
-        fun remove() = onChange(draft.copy(conditions = draft.conditions.filterIndexed { i, _ -> i != index }))
+    conditions.forEachIndexed { index, condition ->
+        fun replace(new: Condition) = onChange(conditions.toMutableList().also { it[index] = new }, matchAll)
+        fun remove() = onChange(conditions.filterIndexed { i, _ -> i != index }, matchAll)
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -672,12 +697,12 @@ private fun IfStep(context: Context, draft: AutomationDraft, onChange: (Automati
     AddMenu(
         label = "+ Agregar condición",
         options = listOf(
-            "Nivel de batería" to { onChange(draft.copy(conditions = draft.conditions + Condition.BatteryLevel(Comparison.GREATER_THAN, 20))) },
-            "Entre dos horas" to { onChange(draft.copy(conditions = draft.conditions + Condition.TimeBetween("07:00", "22:00"))) },
-            "Conectado a un Wi-Fi" to { onChange(draft.copy(conditions = draft.conditions + Condition.WifiConnected())) },
-            "Cargando o sin cargador" to { onChange(draft.copy(conditions = draft.conditions + Condition.Charging())) },
+            "Nivel de batería" to { onChange(conditions + Condition.BatteryLevel(Comparison.GREATER_THAN, 20), matchAll) },
+            "Entre dos horas" to { onChange(conditions + Condition.TimeBetween("07:00", "22:00"), matchAll) },
+            "Conectado a un Wi-Fi" to { onChange(conditions + Condition.WifiConnected(), matchAll) },
+            "Cargando o sin cargador" to { onChange(conditions + Condition.Charging(), matchAll) },
             "Solo ciertos días" to {
-                onChange(draft.copy(conditions = draft.conditions + Condition.DaysOfWeek(Weekday.entries.take(5))))
+                onChange(conditions + Condition.DaysOfWeek(Weekday.entries.take(5)), matchAll)
             },
         ),
     )
@@ -728,152 +753,7 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                     TextButton(onClick = { onChange(draft.copy(actions = draft.actions.filterIndexed { i, _ -> i != index })) }) { Text("Quitar") }
                 }
                 Column(Modifier.padding(end = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    when (action) {
-                        is Action.ShowNotification -> {
-                            OutlinedTextField(action.title, { replace(action.copy(title = it)) }, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                            OutlinedTextField(action.text, { replace(action.copy(text = it)) }, label = { Text("Texto") }, modifier = Modifier.fillMaxWidth())
-                            Text("Podés usar %battery (batería), %time (hora) y %date (fecha).", style = MaterialTheme.typography.bodySmall)
-                            if ((context.applicationContext as LaVaraApp).container.actionExecutor.notificationPrefs.onlyErrors) {
-                                Text(
-                                    "Ojo: no se va a ver, porque está encendido \"Solo avisar si algo sale mal\" (menú ☰ → Notificaciones).",
-                                    color = MaterialTheme.colorScheme.error,
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                        is Action.Delay -> WaitFields(action) { replace(it) }
-                        is Action.OpenApp -> {
-                            val label = remember(action.packageName) { InstalledApps(context).label(action.packageName) }
-                            OutlinedButton(onClick = { pickFor = index }, modifier = Modifier.fillMaxWidth()) {
-                                AppIcon(action.packageName)
-                                Text(label ?: "No está instalada (${action.packageName}). Tocá para elegir otra.", modifier = Modifier.padding(start = 10.dp).weight(1f))
-                            }
-                        }
-                        is Action.OpenUrl -> {
-                            // El campo arranca vacío; lo que se escriba o pegue se limpia antes de guardarlo.
-                            val saved = if (action.url == "https://") "" else action.url
-                            var typed by remember(index) { mutableStateOf(saved) }
-                            // Si la acción cambió por otro lado (por ejemplo, al moverla), se muestra la guardada.
-                            val text = if ((Action.OpenUrl.normalize(typed) ?: "https://") == action.url) typed else saved
-                            val normalized = Action.OpenUrl.normalize(text)
-                            OutlinedTextField(
-                                value = text,
-                                onValueChange = { new ->
-                                    typed = new
-                                    replace(Action.OpenUrl(Action.OpenUrl.normalize(new) ?: "https://"))
-                                },
-                                label = { Text("Enlace") },
-                                placeholder = { Text("Pegá el enlace (ej.: waze.com/ul?q=casa)") },
-                                isError = text.isNotBlank() && normalized == null,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                                supportingText = {
-                                    Text(
-                                        when {
-                                            normalized != null -> "Se va a abrir: ${Action.OpenUrl(normalized).host}"
-                                            text.isBlank() -> "Se abre en el navegador o en la app que corresponda."
-                                            else -> "No encuentro un sitio en ese texto. Pegá el enlace tal como lo copiaste."
-                                        },
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                        is Action.Flashlight -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Choice("Encender", action.on, Modifier.weight(1f)) { replace(Action.Flashlight(true)) }
-                            Choice("Apagar", !action.on, Modifier.weight(1f)) { replace(Action.Flashlight(false)) }
-                        }
-                        is Action.SetVolume -> {
-                            OptionPicker(VolumeStream.entries, action.stream, { "Volumen de " + it.label }) { replace(action.copy(stream = it)) }
-                            PercentSlider(action.percent, 0) { replace(action.copy(percent = it)) }
-                        }
-                        is Action.SetRingerMode -> {
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                RingerMode.entries.forEach { mode ->
-                                    Choice(mode.label.replaceFirstChar { it.uppercase() }, action.mode == mode, Modifier.weight(1f)) {
-                                        replace(Action.SetRingerMode(mode))
-                                    }
-                                }
-                            }
-                            PermissionHint(action)
-                        }
-                        is Action.DoNotDisturb -> {
-                            OptionPicker(DndMode.entries, action.mode, { if (it == DndMode.OFF) "Apagar No molestar" else "Encender: " + it.label }) {
-                                replace(Action.DoNotDisturb(it))
-                            }
-                            PermissionHint(action)
-                        }
-                        is Action.SetBrightness -> {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Choice("Fijo", !action.auto, Modifier.weight(1f)) { replace(action.copy(auto = false)) }
-                                Choice("Automático", action.auto, Modifier.weight(1f)) { replace(action.copy(auto = true)) }
-                            }
-                            if (!action.auto) PercentSlider(action.percent, 5) { replace(action.copy(percent = it)) }
-                            PermissionHint(action)
-                        }
-                        is Action.OpenSystemPanel -> {
-                            OptionPicker(SystemPanel.entries, action.panel, { it.label.replaceFirstChar { c -> c.uppercase() } }) {
-                                replace(Action.OpenSystemPanel(it))
-                            }
-                            Text(
-                                "Android no deja a ninguna app encender ni apagar ${action.panel.label} sola. La Vara abre el interruptor y vos lo tocás.",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        is Action.WhatsAppMessage -> {
-                            PhoneField(action.phone, action.contactName, international = true) { phone, name ->
-                                replace(action.copy(phone = phone, contactName = name))
-                            }
-                            MessageField(action.text) { replace(action.copy(text = it)) }
-                            Text(
-                                "WhatsApp se abre en ese chat con el mensaje escrito y vos tocás Enviar. Podés usar %battery, %time y %date.",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        is Action.SendSms -> {
-                            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
-                                replace(action.copy(phone = phone, contactName = name))
-                            }
-                            MessageField(action.text) { replace(action.copy(text = it)) }
-                            Text(
-                                "El SMS sale solo, sin tocar nada, y cuesta como un SMS normal de tu plan. Podés usar %battery, %time y %date.",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            SmsPermissionHint()
-                        }
-                        is Action.DialNumber -> {
-                            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
-                                replace(action.copy(phone = phone, contactName = name))
-                            }
-                            Text("Se abre el teléfono con el número marcado y vos tocás Llamar.", style = MaterialTheme.typography.bodySmall)
-                        }
-                        is Action.Navigate -> {
-                            OptionPicker(NavigationApp.entries, action.app, { "Con " + it.label }) { replace(action.copy(app = it)) }
-                            OutlinedTextField(
-                                value = action.destination,
-                                onValueChange = { replace(action.copy(destination = it)) },
-                                label = { Text("Destino") },
-                                placeholder = { Text("Dirección, lugar o coordenadas") },
-                                supportingText = { Text("Ej.: Mall San Pedro, o 9.9325,-84.0796 copiado del mapa.") },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        }
-                        is Action.TapInApp -> TapFields(action, onPickApp = { tapPickFor = index }) { replace(it) }
-                        is Action.RunAutomation -> {
-                            var open by remember { mutableStateOf(false) }
-                            val target = others.firstOrNull { it.id == action.automationId }
-                            Box {
-                                OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-                                    Text(target?.name ?: if (action.automationId.isBlank()) "Elegir cuál…" else "No existe: ${action.automationId}")
-                                }
-                                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                                    if (others.isEmpty()) DropdownMenuItem(text = { Text("No hay otras automatizaciones") }, onClick = { open = false })
-                                    others.forEach { other ->
-                                        DropdownMenuItem(text = { Text(other.name) }, onClick = { open = false; replace(Action.RunAutomation(other.id)) })
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    ActionFields(action, key = index, others = others, onPickApp = { pickFor = index }, onPickTapApp = { tapPickFor = index }) { replace(it) }
                 }
             }
         }
@@ -901,6 +781,11 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
             "No molestar" to { onChange(draft.copy(actions = draft.actions + Action.DoNotDisturb())) },
             "Brillo de pantalla" to { onChange(draft.copy(actions = draft.actions + Action.SetBrightness())) },
             "Wi-Fi, datos, Bluetooth, ubicación…" to { onChange(draft.copy(actions = draft.actions + Action.OpenSystemPanel())) },
+            "Vibrar" to { onChange(draft.copy(actions = draft.actions + Action.Vibrate())) },
+            "Copiar texto al portapapeles" to { onChange(draft.copy(actions = draft.actions + Action.CopyToClipboard())) },
+            "Compartir texto" to { onChange(draft.copy(actions = draft.actions + Action.ShareText())) },
+            "Música (pausar, siguiente…)" to { onChange(draft.copy(actions = draft.actions + Action.MediaControl())) },
+            "Si… / si no… (según una condición)" to { onChange(draft.copy(actions = draft.actions + Action.IfElse())) },
         ),
     )
 
@@ -962,6 +847,181 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
 }
 
 private const val NEW_ACTION = -1
+
+/** Los campos de una acción. [key] distingue una acción de otra en la lista (para lo que se recuerda). */
+@Composable
+private fun ActionFields(
+    action: Action,
+    key: Int,
+    others: List<Automation>,
+    onPickApp: () -> Unit,
+    onPickTapApp: () -> Unit,
+    replace: (Action) -> Unit,
+) {
+    val context = LocalContext.current
+    when (action) {
+        is Action.ShowNotification -> {
+            OutlinedTextField(action.title, { replace(action.copy(title = it)) }, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(action.text, { replace(action.copy(text = it)) }, label = { Text("Texto") }, modifier = Modifier.fillMaxWidth())
+            Text("Podés usar %battery (batería), %time (hora) y %date (fecha).", style = MaterialTheme.typography.bodySmall)
+            if (!(context.applicationContext as LaVaraApp).container.actionExecutor.notificationPrefs.showOwn) {
+                Text(
+                    "Ojo: no se va a ver, porque está apagado \"Mostrar mis notificaciones\" (menú ☰ → Notificaciones).",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        is Action.Delay -> WaitFields(action) { replace(it) }
+        is Action.OpenApp -> {
+            val label = remember(action.packageName) { InstalledApps(context).label(action.packageName) }
+            OutlinedButton(onClick = { onPickApp() }, modifier = Modifier.fillMaxWidth()) {
+                AppIcon(action.packageName)
+                Text(label ?: "No está instalada (${action.packageName}). Tocá para elegir otra.", modifier = Modifier.padding(start = 10.dp).weight(1f))
+            }
+        }
+        is Action.OpenUrl -> {
+            // El campo arranca vacío; lo que se escriba o pegue se limpia antes de guardarlo.
+            val saved = if (action.url == "https://") "" else action.url
+            var typed by remember(key) { mutableStateOf(saved) }
+            // Si la acción cambió por otro lado (por ejemplo, al moverla), se muestra la guardada.
+            val text = if ((Action.OpenUrl.normalize(typed) ?: "https://") == action.url) typed else saved
+            val normalized = Action.OpenUrl.normalize(text)
+            OutlinedTextField(
+                value = text,
+                onValueChange = { new ->
+                    typed = new
+                    replace(Action.OpenUrl(Action.OpenUrl.normalize(new) ?: "https://"))
+                },
+                label = { Text("Enlace") },
+                placeholder = { Text("Pegá el enlace (ej.: waze.com/ul?q=casa)") },
+                isError = text.isNotBlank() && normalized == null,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                supportingText = {
+                    Text(
+                        when {
+                            normalized != null -> "Se va a abrir: ${Action.OpenUrl(normalized).host}"
+                            text.isBlank() -> "Se abre en el navegador o en la app que corresponda."
+                            else -> "No encuentro un sitio en ese texto. Pegá el enlace tal como lo copiaste."
+                        },
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        is Action.Flashlight -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Choice("Encender", action.on, Modifier.weight(1f)) { replace(Action.Flashlight(true)) }
+            Choice("Apagar", !action.on, Modifier.weight(1f)) { replace(Action.Flashlight(false)) }
+        }
+        is Action.SetVolume -> {
+            OptionPicker(VolumeStream.entries, action.stream, { "Volumen de " + it.label }) { replace(action.copy(stream = it)) }
+            PercentSlider(action.percent, 0) { replace(action.copy(percent = it)) }
+        }
+        is Action.SetRingerMode -> {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                RingerMode.entries.forEach { mode ->
+                    Choice(mode.label.replaceFirstChar { it.uppercase() }, action.mode == mode, Modifier.weight(1f)) {
+                        replace(Action.SetRingerMode(mode))
+                    }
+                }
+            }
+            PermissionHint(action)
+        }
+        is Action.DoNotDisturb -> {
+            OptionPicker(DndMode.entries, action.mode, { if (it == DndMode.OFF) "Apagar No molestar" else "Encender: " + it.label }) {
+                replace(Action.DoNotDisturb(it))
+            }
+            PermissionHint(action)
+        }
+        is Action.SetBrightness -> {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Choice("Fijo", !action.auto, Modifier.weight(1f)) { replace(action.copy(auto = false)) }
+                Choice("Automático", action.auto, Modifier.weight(1f)) { replace(action.copy(auto = true)) }
+            }
+            if (!action.auto) PercentSlider(action.percent, 5) { replace(action.copy(percent = it)) }
+            PermissionHint(action)
+        }
+        is Action.OpenSystemPanel -> {
+            OptionPicker(SystemPanel.entries, action.panel, { it.label.replaceFirstChar { c -> c.uppercase() } }) {
+                replace(Action.OpenSystemPanel(it))
+            }
+            Text(
+                "Android no deja a ninguna app encender ni apagar ${action.panel.label} sola. La Vara abre el interruptor y vos lo tocás.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        is Action.WhatsAppMessage -> {
+            PhoneField(action.phone, action.contactName, international = true) { phone, name ->
+                replace(action.copy(phone = phone, contactName = name))
+            }
+            MessageField(action.text) { replace(action.copy(text = it)) }
+            Text(
+                "WhatsApp se abre en ese chat con el mensaje escrito y vos tocás Enviar. Podés usar %battery, %time y %date.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        is Action.SendSms -> {
+            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
+                replace(action.copy(phone = phone, contactName = name))
+            }
+            MessageField(action.text) { replace(action.copy(text = it)) }
+            Text(
+                "El SMS sale solo, sin tocar nada, y cuesta como un SMS normal de tu plan. Podés usar %battery, %time y %date.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            SmsPermissionHint()
+        }
+        is Action.DialNumber -> {
+            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
+                replace(action.copy(phone = phone, contactName = name))
+            }
+            Text("Se abre el teléfono con el número marcado y vos tocás Llamar.", style = MaterialTheme.typography.bodySmall)
+        }
+        is Action.Navigate -> {
+            OptionPicker(NavigationApp.entries, action.app, { "Con " + it.label }) { replace(action.copy(app = it)) }
+            OutlinedTextField(
+                value = action.destination,
+                onValueChange = { replace(action.copy(destination = it)) },
+                label = { Text("Destino") },
+                placeholder = { Text("Dirección, lugar o coordenadas") },
+                supportingText = { Text("Ej.: Mall San Pedro, o 9.9325,-84.0796 copiado del mapa.") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        is Action.TapInApp -> TapFields(action, onPickApp = { onPickTapApp() }) { replace(it) }
+        is Action.RunAutomation -> {
+            var open by remember { mutableStateOf(false) }
+            val target = others.firstOrNull { it.id == action.automationId }
+            Box {
+                OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(target?.name ?: if (action.automationId.isBlank()) "Elegir cuál…" else "No existe: ${action.automationId}")
+                }
+                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                    if (others.isEmpty()) DropdownMenuItem(text = { Text("No hay otras automatizaciones") }, onClick = { open = false })
+                    others.forEach { other ->
+                        DropdownMenuItem(text = { Text(other.name) }, onClick = { open = false; replace(Action.RunAutomation(other.id)) })
+                    }
+                }
+            }
+        }
+        is Action.Vibrate -> OptionPicker(listOf(300L, 500L, 1000L, 2000L), action.millis, { "Vibrar " + if (it < 1000) "$it ms" else "${it / 1000} s" }) {
+            replace(Action.Vibrate(it))
+        }
+        is Action.CopyToClipboard -> {
+            OutlinedTextField(action.text, { replace(action.copy(text = it)) }, label = { Text("Texto a copiar") }, modifier = Modifier.fillMaxWidth())
+            Text("Queda listo para pegar. Podés usar %battery, %time y %date.", style = MaterialTheme.typography.bodySmall)
+        }
+        is Action.ShareText -> {
+            OutlinedTextField(action.text, { replace(action.copy(text = it)) }, label = { Text("Texto a compartir") }, modifier = Modifier.fillMaxWidth())
+            Text("Se abre el menú Compartir y vos elegís la app. Podés usar %battery, %time y %date.", style = MaterialTheme.typography.bodySmall)
+        }
+        is Action.MediaControl -> {
+            OptionPicker(MediaCommand.entries, action.command, { it.label.replaceFirstChar { c -> c.uppercase() } }) { replace(Action.MediaControl(it)) }
+            Text("Funciona con la app de música o video que esté sonando, como los botones de los audífonos.", style = MaterialTheme.typography.bodySmall)
+        }
+        is Action.IfElse -> IfElseFields(action, others) { replace(it) }
+    }
+}
 
 /** Botón que muestra la opción elegida y despliega las demás. */
 @Composable
@@ -1074,5 +1134,81 @@ private fun CooldownRow(seconds: Long, onChange: (Long) -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** "Si… / si no…": condiciones y las acciones de cada camino. */
+@Composable
+private fun IfElseFields(action: Action.IfElse, others: List<Automation>, onChange: (Action.IfElse) -> Unit) {
+    val context = LocalContext.current
+    Text("Si se cumple…", fontWeight = FontWeight.Bold)
+    ConditionList(context, action.conditions, action.matchAll, "Se cumple si se cumplen") { conditions, all ->
+        onChange(action.copy(conditions = conditions, matchAll = all))
+    }
+    if (action.conditions.isEmpty()) Text("Sin condiciones, se cumple siempre.", style = MaterialTheme.typography.bodySmall)
+    BranchActions("…hacer esto:", action.then, others) { onChange(action.copy(then = it)) }
+    BranchActions("Si no, hacer esto:", action.otherwise, others) { onChange(action.copy(otherwise = it)) }
+    Text(
+        "Adentro de un \"si\" las esperas son de hasta 10 segundos. Para tocar botones en otra app, usá \"Ejecutar otra automatización\".",
+        style = MaterialTheme.typography.bodySmall,
+    )
+}
+
+/** Acciones de un camino del "si". Las mismas que afuera, menos "Tocar un botón" y otro "si". */
+@Composable
+private fun BranchActions(title: String, actions: List<Action>, others: List<Automation>, onChange: (List<Action>) -> Unit) {
+    var pickFor by remember { mutableStateOf<Int?>(null) }
+    Text(title, fontWeight = FontWeight.Bold)
+    if (actions.isEmpty()) Text("Nada.", style = MaterialTheme.typography.bodySmall)
+    actions.forEachIndexed { index, inner ->
+        fun replace(new: Action) = onChange(actions.toMutableList().also { it[index] = new })
+        Surface(
+            Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceVariant,
+        ) {
+            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${index + 1}. ${actionTitle(inner)}", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { onChange(actions.filterIndexed { i, _ -> i != index }) }) { Text("Quitar") }
+                }
+                ActionFields(inner, key = index, others = others, onPickApp = { pickFor = index }, onPickTapApp = {}) { replace(it) }
+            }
+        }
+    }
+    fun add(action: Action) = onChange(actions + action)
+    AddMenu(
+        label = "+ Agregar acción aquí",
+        options = listOf(
+            "Mostrar notificación" to { add(Action.ShowNotification("La Vara", "")) },
+            "Esperar unos segundos" to { add(Action.Delay(5)) },
+            "Abrir app" to { pickFor = NEW_ACTION },
+            "Abrir enlace" to { add(Action.OpenUrl("https://")) },
+            "WhatsApp a un contacto" to { add(Action.WhatsAppMessage()) },
+            "Enviar SMS (sale solo)" to { add(Action.SendSms()) },
+            "Llamar a un número" to { add(Action.DialNumber()) },
+            "Navegar a un lugar (Waze, Maps)" to { add(Action.Navigate()) },
+            "Ejecutar otra automatización" to { add(Action.RunAutomation("")) },
+            "Linterna" to { add(Action.Flashlight()) },
+            "Volumen" to { add(Action.SetVolume()) },
+            "Modo de sonido (vibrar, silencio)" to { add(Action.SetRingerMode()) },
+            "No molestar" to { add(Action.DoNotDisturb()) },
+            "Brillo de pantalla" to { add(Action.SetBrightness()) },
+            "Wi-Fi, datos, Bluetooth, ubicación…" to { add(Action.OpenSystemPanel()) },
+            "Vibrar" to { add(Action.Vibrate()) },
+            "Copiar texto al portapapeles" to { add(Action.CopyToClipboard()) },
+            "Compartir texto" to { add(Action.ShareText()) },
+            "Música (pausar, siguiente…)" to { add(Action.MediaControl()) },
+        ),
+    )
+    pickFor?.let { target ->
+        AppPickerDialog(
+            onDismiss = { pickFor = null },
+            onPick = { app ->
+                pickFor = null
+                val open = Action.OpenApp(app.packageName)
+                onChange(if (target == NEW_ACTION) actions + open else actions.toMutableList().also { it[target] = open })
+            },
+        )
     }
 }

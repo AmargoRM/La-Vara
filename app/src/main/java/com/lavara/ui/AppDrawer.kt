@@ -89,44 +89,42 @@ private fun EngineSummaryCard(container: AppContainer) {
     }
 }
 
-/** Qué notificaciones muestra La Vara: las de tus automatizaciones flotantes o discretas, y "Tocá para abrir". */
+/**
+ * Qué avisos muestra La Vara: tres interruptores. Con los tres apagados, las automatizaciones no muestran
+ * ninguna notificación; todo queda en Historial.
+ */
 @Composable
 private fun NotificationsCard(container: AppContainer) {
     val prefs = container.actionExecutor.notificationPrefs
-    var onlyErrors by remember { mutableStateOf(prefs.onlyErrors) }
-    var floating by remember { mutableStateOf(prefs.floating) }
+    var showOwn by remember { mutableStateOf(prefs.showOwn) }
+    var notifyErrors by remember { mutableStateOf(prefs.notifyErrors) }
     var tapToOpen by remember { mutableStateOf(prefs.tapToOpen) }
+    fun log(what: String, on: Boolean) = container.logger.info("Notificaciones", "$what: ${if (on) "encendido" else "apagado"}")
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Notificaciones", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("Con los tres apagados, tus automatizaciones no muestran ningún aviso. Todo queda en Historial.", style = MaterialTheme.typography.bodySmall)
             SwitchRow(
-                "Solo avisar si algo sale mal",
-                if (onlyErrors) "Encendido: no aparece nada cuando todo sale bien, ni las de \"Mostrar notificación\". Si una automatización falla, queda un aviso discreto."
-                else "Apagado: se muestran las de \"Mostrar notificación\" y la confirmación del widget.",
-                onlyErrors,
-            ) {
-                onlyErrors = it
-                prefs.onlyErrors = it
-                container.logger.info("Notificaciones", "Solo avisar si algo sale mal: ${if (it) "encendido" else "apagado"}")
-            }
-            if (!onlyErrors) SwitchRow(
-                "Las de \"Mostrar notificación\" aparecen flotando arriba",
-                if (floating) "Encendido: salen arriba de la pantalla." else "Apagado: llegan discretas, sin flotar ni sonar.",
-                floating,
-            ) {
-                floating = it
-                prefs.floating = it
-                container.logger.info("Notificaciones", "Notificaciones de automatizaciones: ${if (it) "flotantes" else "discretas"}")
-            }
+                "Mostrar mis notificaciones",
+                if (showOwn) "Encendido: las de la acción \"Mostrar notificación\" aparecen, sin flotar ni sonar."
+                else "Apagado: la acción \"Mostrar notificación\" no muestra nada.",
+                showOwn,
+            ) { showOwn = it; prefs.showOwn = it; log("Mostrar mis notificaciones", it) }
             SwitchRow(
-                "Avisar \"Tocá para abrir\" si algo no se pudo abrir solo",
-                if (tapToOpen) "Encendido: queda una notificación discreta." else "Apagado: no hay notificación; queda anotado en Historial.",
+                "Avisar cuando algo falla",
+                if (notifyErrors) "Encendido: un aviso discreto por automatización que falla." else "Apagado: los errores solo quedan en Historial.",
+                notifyErrors,
+            ) { notifyErrors = it; prefs.notifyErrors = it; log("Avisar cuando algo falla", it) }
+            SwitchRow(
+                "Avisar \"Tocá para abrir\"",
+                if (tapToOpen) "Encendido: si algo no se pudo abrir solo, queda un aviso para abrirlo." else "Apagado: si algo no se pudo abrir solo, queda en Historial.",
                 tapToOpen,
-            ) {
-                tapToOpen = it
-                prefs.tapToOpen = it
-                container.logger.info("Notificaciones", "\"Tocá para abrir\": ${if (it) "encendido" else "apagado"}")
-            }
+            ) { tapToOpen = it; prefs.tapToOpen = it; log("Avisar \"Tocá para abrir\"", it) }
+            Text(
+                "Aparte, Android exige un aviso fijo mientras La Vara escucha la batería o el Wi-Fi, o espera que desbloquees. Ya está al mínimo, " +
+                    "sin ícono arriba; si querés esconderlo, mantenelo presionado y apagalo desde Android. El aviso de versión nueva se maneja en Actualizaciones.",
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
     }
 }

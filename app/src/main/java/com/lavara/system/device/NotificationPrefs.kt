@@ -3,27 +3,28 @@ package com.lavara.system.device
 import android.content.Context
 
 /**
- * Qué notificaciones quiere ver el usuario. Por pedido del usuario, la notificación "Tocá para abrir"
- * (cuando Android no deja abrir algo solo) viene apagada: la falla queda solo en Historial.
+ * Qué avisos quiere ver el usuario. Son tres interruptores; con los tres apagados, las automatizaciones no
+ * muestran ninguna notificación (todo queda en Historial). Los avisos fijos de los servicios en primer plano
+ * los exige Android y no dependen de esto.
  */
 class NotificationPrefs(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("notificaciones", Context.MODE_PRIVATE)
+
+    /**
+     * Mostrar las notificaciones de la acción "Mostrar notificación" (siempre discretas: no flotan ni suenan).
+     * Quien venía de "Solo avisar si algo sale mal" (0.1.99) conserva su elección.
+     */
+    var showOwn: Boolean
+        get() = prefs.getBoolean("mostrar_propias", !prefs.getBoolean("solo_errores", true))
+        set(value) = prefs.edit().putBoolean("mostrar_propias", value).apply()
+
+    /** Aviso discreto cuando una automatización falla. Encendido por defecto. */
+    var notifyErrors: Boolean
+        get() = prefs.getBoolean("avisar_errores", true)
+        set(value) = prefs.edit().putBoolean("avisar_errores", value).apply()
 
     /** Mostrar "Tocá para abrir" cuando una app no se pudo abrir sola. Apagado por defecto. */
     var tapToOpen: Boolean
         get() = prefs.getBoolean("tocar_para_abrir", false)
         set(value) = prefs.edit().putBoolean("tocar_para_abrir", value).apply()
-
-    /**
-     * Solo avisar si algo sale mal (pedido del usuario): la acción "Mostrar notificación" no muestra nada y el
-     * widget no confirma; solo queda un aviso discreto cuando una automatización falla. Encendido por defecto.
-     */
-    var onlyErrors: Boolean
-        get() = prefs.getBoolean("solo_errores", true)
-        set(value) = prefs.edit().putBoolean("solo_errores", value).apply()
-
-    /** Las notificaciones de la acción "Mostrar notificación" salen flotando arriba (true) o discretas (false). */
-    var floating: Boolean
-        get() = prefs.getBoolean("flotantes", true)
-        set(value) = prefs.edit().putBoolean("flotantes", value).apply()
 }
