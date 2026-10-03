@@ -94,6 +94,112 @@ sealed interface Action {
     data class RunAutomation(
         val automationId: String,
     ) : Action
+
+    /** Enciende ([on] = true) o apaga la linterna. No pide permisos. */
+    @Serializable
+    @SerialName("flashlight")
+    data class Flashlight(
+        val on: Boolean = true,
+    ) : Action
+
+    /** Pone el volumen de [stream] en [percent] % (0 a 100). */
+    @Serializable
+    @SerialName("set_volume")
+    data class SetVolume(
+        val stream: VolumeStream = VolumeStream.MEDIA,
+        val percent: Int = 50,
+    ) : Action {
+        init {
+            require(percent in 0..100) { "percent debe estar entre 0 y 100, no $percent" }
+        }
+    }
+
+    /** Cambia el modo de sonido del teléfono. [RingerMode.SILENT] necesita "Acceso a No molestar". */
+    @Serializable
+    @SerialName("set_ringer_mode")
+    data class SetRingerMode(
+        val mode: RingerMode = RingerMode.VIBRATE,
+    ) : Action
+
+    /** Enciende No molestar en el modo [mode], o lo apaga con [DndMode.OFF]. Necesita "Acceso a No molestar". */
+    @Serializable
+    @SerialName("do_not_disturb")
+    data class DoNotDisturb(
+        val mode: DndMode = DndMode.PRIORITY,
+    ) : Action
+
+    /**
+     * Cambia el brillo de la pantalla: automático si [auto] es true; si no, fijo en [percent] % (1 a 100).
+     * Necesita el permiso "Modificar ajustes del sistema".
+     */
+    @Serializable
+    @SerialName("set_brightness")
+    data class SetBrightness(
+        val percent: Int = 50,
+        val auto: Boolean = false,
+    ) : Action {
+        init {
+            require(percent in 1..100) { "percent debe estar entre 1 y 100, no $percent" }
+        }
+    }
+
+    /**
+     * Abre el interruptor de una función que Android no deja cambiar a las apps (Wi-Fi, datos, Bluetooth…).
+     * El usuario lo toca; La Vara no puede encenderla ni apagarla sola (ver docs/LIMITES_ANDROID.md).
+     */
+    @Serializable
+    @SerialName("open_system_panel")
+    data class OpenSystemPanel(
+        val panel: SystemPanel = SystemPanel.WIFI,
+    ) : Action
+}
+
+/** Si la acción necesita el permiso "Acceso a No molestar" (No molestar o modo silencio). */
+fun Action.needsDndAccess(): Boolean =
+    this is Action.DoNotDisturb || (this is Action.SetRingerMode && mode == RingerMode.SILENT)
+
+/** Qué volumen cambia [Action.SetVolume]. */
+@Serializable
+enum class VolumeStream(val label: String) {
+    @SerialName("media") MEDIA("multimedia"),
+    @SerialName("ring") RING("timbre"),
+    @SerialName("notification") NOTIFICATION("notificaciones"),
+    @SerialName("alarm") ALARM("alarma"),
+}
+
+/** Modo de sonido del teléfono. */
+@Serializable
+enum class RingerMode(val label: String) {
+    @SerialName("normal") NORMAL("sonido"),
+    @SerialName("vibrate") VIBRATE("vibrar"),
+    @SerialName("silent") SILENT("silencio"),
+}
+
+/** Modo de No molestar. */
+@Serializable
+enum class DndMode(val label: String) {
+    /** Apagado: suena todo. */
+    @SerialName("off") OFF("apagado"),
+
+    /** Solo lo que está en "Prioridad" en los ajustes de No molestar. */
+    @SerialName("priority") PRIORITY("solo prioridad"),
+
+    /** Solo las alarmas. */
+    @SerialName("alarms") ALARMS("solo alarmas"),
+
+    /** Silencio total, ni alarmas. */
+    @SerialName("silence") SILENCE("silencio total"),
+}
+
+/** Interruptores del sistema que La Vara solo puede abrir. */
+@Serializable
+enum class SystemPanel(val label: String) {
+    @SerialName("wifi") WIFI("Wi-Fi"),
+    @SerialName("mobile_data") MOBILE_DATA("datos móviles"),
+    @SerialName("bluetooth") BLUETOOTH("Bluetooth"),
+    @SerialName("location") LOCATION("ubicación"),
+    @SerialName("nfc") NFC("NFC"),
+    @SerialName("airplane_mode") AIRPLANE_MODE("modo avión"),
 }
 
 /** Resultado de una acción hecha por un [ActionExecutor]. */
@@ -103,8 +209,8 @@ sealed interface ActionResult {
 }
 
 /**
- * Hace las acciones que tocan el teléfono (notificación, abrir app). La implementación con Android
- * llega en S3; el motor solo conoce esta interfaz. Delay y RunAutomation los resuelve el motor.
+ * Hace las acciones que tocan el teléfono (notificación, abrir app, volumen…). La implementación con
+ * Android está en AndroidActionExecutor; el motor solo conoce esta interfaz. Delay y RunAutomation los resuelve el motor.
  */
 fun interface ActionExecutor {
     suspend fun execute(action: Action): ActionResult

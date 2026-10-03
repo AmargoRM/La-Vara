@@ -68,6 +68,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lavara.actions.Action
+import com.lavara.actions.DndMode
+import com.lavara.actions.RingerMode
+import com.lavara.actions.SystemPanel
+import com.lavara.actions.VolumeStream
+import com.lavara.actions.needsDndAccess
+import com.lavara.system.device.SystemControls
 import com.lavara.automation.Automation
 import com.lavara.automation.AutomationDraft
 import com.lavara.automation.OnError
@@ -736,6 +742,47 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
+                        is Action.Flashlight -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Choice("Encender", action.on, Modifier.weight(1f)) { replace(Action.Flashlight(true)) }
+                            Choice("Apagar", !action.on, Modifier.weight(1f)) { replace(Action.Flashlight(false)) }
+                        }
+                        is Action.SetVolume -> {
+                            OptionPicker(VolumeStream.entries, action.stream, { "Volumen de " + it.label }) { replace(action.copy(stream = it)) }
+                            PercentSlider(action.percent, 0) { replace(action.copy(percent = it)) }
+                        }
+                        is Action.SetRingerMode -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                RingerMode.entries.forEach { mode ->
+                                    Choice(mode.label.replaceFirstChar { it.uppercase() }, action.mode == mode, Modifier.weight(1f)) {
+                                        replace(Action.SetRingerMode(mode))
+                                    }
+                                }
+                            }
+                            PermissionHint(action)
+                        }
+                        is Action.DoNotDisturb -> {
+                            OptionPicker(DndMode.entries, action.mode, { if (it == DndMode.OFF) "Apagar No molestar" else "Encender: " + it.label }) {
+                                replace(Action.DoNotDisturb(it))
+                            }
+                            PermissionHint(action)
+                        }
+                        is Action.SetBrightness -> {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Choice("Fijo", !action.auto, Modifier.weight(1f)) { replace(action.copy(auto = false)) }
+                                Choice("Automático", action.auto, Modifier.weight(1f)) { replace(action.copy(auto = true)) }
+                            }
+                            if (!action.auto) PercentSlider(action.percent, 5) { replace(action.copy(percent = it)) }
+                            PermissionHint(action)
+                        }
+                        is Action.OpenSystemPanel -> {
+                            OptionPicker(SystemPanel.entries, action.panel, { it.label.replaceFirstChar { c -> c.uppercase() } }) {
+                                replace(Action.OpenSystemPanel(it))
+                            }
+                            Text(
+                                "Android no deja a ninguna app encender ni apagar ${action.panel.label} sola. La Vara abre el interruptor y vos lo tocás.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                         is Action.RunAutomation -> {
                             var open by remember { mutableStateOf(false) }
                             val target = others.firstOrNull { it.id == action.automationId }
@@ -765,6 +812,12 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
             "Abrir app" to { pickFor = NEW_ACTION },
             "Abrir enlace" to { onChange(draft.copy(actions = draft.actions + Action.OpenUrl("https://"))) },
             "Ejecutar otra automatización" to { onChange(draft.copy(actions = draft.actions + Action.RunAutomation(""))) },
+            "Linterna" to { onChange(draft.copy(actions = draft.actions + Action.Flashlight())) },
+            "Volumen" to { onChange(draft.copy(actions = draft.actions + Action.SetVolume())) },
+            "Modo de sonido (vibrar, silencio)" to { onChange(draft.copy(actions = draft.actions + Action.SetRingerMode())) },
+            "No molestar" to { onChange(draft.copy(actions = draft.actions + Action.DoNotDisturb())) },
+            "Brillo de pantalla" to { onChange(draft.copy(actions = draft.actions + Action.SetBrightness())) },
+            "Wi-Fi, datos, Bluetooth, ubicación…" to { onChange(draft.copy(actions = draft.actions + Action.OpenSystemPanel())) },
         ),
     )
 
@@ -796,6 +849,52 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
 }
 
 private const val NEW_ACTION = -1
+
+/** Botón que muestra la opción elegida y despliega las demás. */
+@Composable
+private fun <T> OptionPicker(options: List<T>, selected: T, label: (T) -> String, onPick: (T) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) { Text(label(selected) + "  ▾") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            options.forEach { option -> DropdownMenuItem(text = { Text(label(option)) }, onClick = { open = false; onPick(option) }) }
+        }
+    }
+}
+
+/** Porcentaje de [min] a 100, de 5 en 5. */
+@Composable
+private fun PercentSlider(percent: Int, min: Int, onChange: (Int) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Slider(
+            value = percent.toFloat(),
+            onValueChange = { onChange(((it / 5).toInt() * 5).coerceIn(min, 100)) },
+            valueRange = min.toFloat()..100f,
+            steps = (100 - min) / 5 - 1,
+            modifier = Modifier.weight(1f),
+        )
+        Text("$percent %", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.width(64.dp), textAlign = TextAlign.End)
+    }
+}
+
+/** Si a la acción le falta un permiso especial, lo dice y lleva al ajuste de Android donde se da. */
+@Composable
+private fun PermissionHint(action: Action) {
+    val context = LocalContext.current
+    val controls = remember { SystemControls(context) }
+    val dnd = action.needsDndAccess() && !controls.hasDndAccess()
+    val brightness = action is Action.SetBrightness && !controls.canWriteSettings()
+    if (!dnd && !brightness) return
+    Text(
+        if (dnd) "Falta el permiso \"Acceso a No molestar\". En la lista, buscá La Vara y activalo."
+        else "Falta el permiso \"Modificar ajustes del sistema\". Activalo en la pantalla que se abre.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error,
+    )
+    OutlinedButton(onClick = { if (dnd) controls.openDndAccessSettings() else controls.openWriteSettings() }) {
+        Text("Dar el permiso")
+    }
+}
 
 @Composable
 private fun AppIcon(packageName: String, size: Int = 32) {

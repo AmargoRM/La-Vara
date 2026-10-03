@@ -27,10 +27,22 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Hace en el teléfono las acciones que el motor le pasa. */
 class AndroidActionExecutor(private val context: Context) : ActionExecutor {
 
+    val systemControls = SystemControls(context)
+
     override suspend fun execute(action: Action): ActionResult = when (action) {
         is Action.ShowNotification -> showNotification(action)
         is Action.OpenApp -> openApp(action)
         is Action.OpenUrl -> openUrl(action)
+        is Action.Flashlight -> systemControls.flashlight(action)
+        is Action.SetVolume -> systemControls.setVolume(action)
+        is Action.SetRingerMode -> systemControls.setRingerMode(action)
+        is Action.DoNotDisturb -> systemControls.doNotDisturb(action)
+        is Action.SetBrightness -> systemControls.setBrightness(action)
+        is Action.OpenSystemPanel -> start(
+            systemControls.panelIntent(action.panel),
+            "el interruptor de ${action.panel.label}",
+            requestCode = action.panel.ordinal + 7000,
+        )
         // Delay y RunAutomation los resuelve el motor; no deberían llegar acá.
         is Action.Delay, is Action.RunAutomation -> ActionResult.Failure("El motor no pasó esta acción al ejecutor")
     }
