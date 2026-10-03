@@ -183,6 +183,62 @@ Lista vacía = no se cumple.
 - Falla si la otra no existe, está desactivada o ya se está ejecutando.
 - **Ciclos:** si A ejecuta a B y B ejecuta a A, La Vara lo detecta, se detiene y lo registra como error (`Ciclo detectado: a → b → a`).
 
+### `flashlight`: linterna
+
+```json
+{ "type": "flashlight", "on": true }
+```
+
+- `on` (por defecto `true`): `true` la enciende, `false` la apaga. No pide permisos.
+- Android puede apagarla si cierra La Vara en segundo plano (por verificar en el teléfono).
+
+### `set_volume`: volumen
+
+```json
+{ "type": "set_volume", "stream": "media", "percent": 40 }
+```
+
+- `stream` (por defecto `"media"`): `"media"` (multimedia), `"ring"` (timbre), `"notification"` (notificaciones) o `"alarm"` (alarma).
+- `percent` (por defecto 50): de 0 a 100. Se redondea al paso de volumen más cercano del teléfono.
+
+### `set_ringer_mode`: modo de sonido
+
+```json
+{ "type": "set_ringer_mode", "mode": "vibrate" }
+```
+
+- `mode` (por defecto `"vibrate"`): `"normal"`, `"vibrate"` o `"silent"`.
+- `"silent"` necesita el permiso "Acceso a No molestar".
+
+### `do_not_disturb`: No molestar
+
+```json
+{ "type": "do_not_disturb", "mode": "priority" }
+```
+
+- `mode` (por defecto `"priority"`): `"off"` (apagado), `"priority"` (solo prioridad), `"alarms"` (solo alarmas) o `"silence"` (silencio total).
+- Necesita el permiso "Acceso a No molestar".
+
+### `set_brightness`: brillo de pantalla
+
+```json
+{ "type": "set_brightness", "percent": 60, "auto": false }
+```
+
+- `auto` (por defecto `false`): `true` pone el brillo automático y se ignora `percent`.
+- `percent` (por defecto 50): de 1 a 100.
+- Necesita el permiso "Modificar ajustes del sistema".
+
+### `open_system_panel`: abrir el interruptor de una función
+
+```json
+{ "type": "open_system_panel", "panel": "wifi" }
+```
+
+- `panel` (por defecto `"wifi"`): `"wifi"`, `"mobile_data"`, `"bluetooth"`, `"location"`, `"nfc"` o `"airplane_mode"`.
+- Android no deja a ninguna app encender ni apagar estas funciones sola (ver `docs/LIMITES_ANDROID.md`). La Vara abre el interruptor y el usuario lo toca.
+- Igual que `open_app`: con La Vara en segundo plano necesita "Mostrar sobre otras apps"; si no, muestra una notificación para abrirlo.
+
 ## 6. Política de error
 
 Qué pasa si una acción falla (por ejemplo, la app a abrir no está instalada):

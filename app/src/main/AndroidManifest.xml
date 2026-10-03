@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Consultar a GitHub si hay versiones nuevas y descargarlas. -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -21,6 +22,13 @@
     <!-- Abrir otras apps cuando La Vara está en segundo plano (Android 10+ lo exige). El usuario lo
          concede en Ajustes ("Mostrar sobre otras apps"), solo si una automatización abre apps. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Acciones No molestar y modo silencio. El usuario lo concede en Ajustes ("Acceso a No molestar"),
+         solo si una automatización lo usa. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <!-- Acción de brillo. El usuario lo concede en Ajustes ("Modificar ajustes del sistema"), solo si la usa. -->
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <!-- Ver las apps que aparecen en el menú de apps, para elegir cuál abrir (Android 11+ lo exige). -->
     <queries>

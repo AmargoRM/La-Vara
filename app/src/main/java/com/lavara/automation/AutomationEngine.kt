@@ -218,6 +218,12 @@ class AutomationEngine(
             is Action.OpenUrl -> "Abrir enlace ${action.host}"
             is Action.Delay -> "Esperar ${action.seconds} s"
             is Action.RunAutomation -> "Ejecutar automatización ${action.automationId}"
+            is Action.Flashlight -> if (action.on) "Encender linterna" else "Apagar linterna"
+            is Action.SetVolume -> "Volumen de ${action.stream.label} al ${action.percent} %"
+            is Action.SetRingerMode -> "Modo de sonido: ${action.mode.label}"
+            is Action.DoNotDisturb -> "No molestar: ${action.mode.label}"
+            is Action.SetBrightness -> if (action.auto) "Brillo automático" else "Brillo al ${action.percent} %"
+            is Action.OpenSystemPanel -> "Abrir interruptor de ${action.panel.label}"
         }
     }
 }

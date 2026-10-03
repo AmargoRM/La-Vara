@@ -38,7 +38,8 @@ data class AutomationDraft(
                 is Action.OpenUrl -> if (action.host == "enlace" || !action.host.contains('.')) {
                     add("Falta el enlace de la acción ${i + 1}: pegalo en el campo \"Enlace\".")
                 }
-                is Action.OpenApp -> Unit
+                is Action.OpenApp, is Action.Flashlight, is Action.SetVolume, is Action.SetRingerMode,
+                is Action.DoNotDisturb, is Action.SetBrightness, is Action.OpenSystemPanel -> Unit
             }
         }
     }

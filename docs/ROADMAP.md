@@ -87,6 +87,7 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - [ ] **S13 Bluetooth y Wi-Fi:** conectado/desconectado a un dispositivo emparejado o a una red concreta.
 - [ ] **S14 Widget** de pantalla de inicio con automatizaciones favoritas.
 - [ ] **S15 Más acciones del sistema:** vibrar, sonido, volumen, multimedia, abrir URL, abrir ajuste, compartir texto, copiar al portapapeles, brillo (con permiso especial).
+  - [x] Primera parte: linterna, volumen, modo de sonido, No molestar, brillo y abrir el interruptor de Wi-Fi, datos, Bluetooth, ubicación, NFC y modo avión.
 - [ ] **S16 Archivos:** crear, escribir, añadir, leer, copiar, mover, eliminar, existe, dentro de carpetas que el usuario elija (Storage Access Framework).
 
 ## ETAPA 3 — Avanzado

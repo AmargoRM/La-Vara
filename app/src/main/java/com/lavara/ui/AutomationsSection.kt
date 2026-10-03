@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lavara.actions.Action
+import com.lavara.actions.needsDndAccess
 import com.lavara.automation.Automation
 import com.lavara.automation.AutomationDraft
 import com.lavara.automation.ExecutionStatus
@@ -97,8 +98,14 @@ fun AutomationsSection(
                 exactAlarms = container.alarmScheduler.canScheduleExact(),
                 battery = container.batteryOptimization.isExcluded(),
                 // Solo hace falta si alguna automatización activa abre apps.
-                openApps = automations.none { a -> a.enabled && a.actions.any { it is Action.OpenApp || it is Action.OpenUrl } } ||
-                    container.actionExecutor.canOpenAppsInBackground(),
+                openApps = automations.none { a ->
+                    a.enabled && a.actions.any { it is Action.OpenApp || it is Action.OpenUrl || it is Action.OpenSystemPanel }
+                } || container.actionExecutor.canOpenAppsInBackground(),
+                // No molestar y modo silencio necesitan "Acceso a No molestar"; el brillo, "Modificar ajustes del sistema".
+                dnd = automations.none { a -> a.enabled && a.actions.any { it.needsDndAccess() } } ||
+                    container.actionExecutor.systemControls.hasDndAccess(),
+                brightness = automations.none { a -> a.enabled && a.actions.any { it is Action.SetBrightness } } ||
+                    container.actionExecutor.systemControls.canWriteSettings(),
                 location = automations.none { it.enabled && it.trigger is Trigger.Location } ||
                     (container.locationAccess.hasBackground() && container.locationAccess.isLocationOn()),
                 locationOn = container.locationAccess.isLocationOn(),
@@ -173,6 +180,8 @@ fun AutomationsSection(
                 onLocation = {
                     if (!health.locationOn) container.locationAccess.openLocationSettings() else container.locationAccess.openAppSettings()
                 },
+                onDnd = { container.actionExecutor.systemControls.openDndAccessSettings() },
+                onBrightness = { container.actionExecutor.systemControls.openWriteSettings() },
             )
         }
 
@@ -276,8 +285,10 @@ private data class Health(
     val openApps: Boolean,
     val location: Boolean,
     val locationOn: Boolean,
+    val dnd: Boolean,
+    val brightness: Boolean,
 ) {
-    val allOk get() = notifications && exactAlarms && battery && openApps && location
+    val allOk get() = notifications && exactAlarms && battery && openApps && location && dnd && brightness
 }
 
 @Composable
@@ -288,6 +299,8 @@ private fun HealthCard(
     onBattery: () -> Unit,
     onOpenApps: () -> Unit,
     onLocation: () -> Unit,
+    onDnd: () -> Unit,
+    onBrightness: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -321,6 +334,20 @@ private fun HealthCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedButton(onClick = onLocation) { Text(if (!health.locationOn) "Encender la ubicación" else "Abrir Ajustes de La Vara") }
+            }
+            if (!health.dnd) {
+                Text(
+                    "Una automatización cambia No molestar o pone el teléfono en silencio. Android lo permite solo con \"Acceso a No molestar\": en la lista, buscá La Vara y activalo.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = onDnd) { Text("Permitir No molestar") }
+            }
+            if (!health.brightness) {
+                Text(
+                    "Una automatización cambia el brillo. Android lo permite solo con \"Modificar ajustes del sistema\": activalo en la pantalla que se abre.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = onBrightness) { Text("Permitir cambiar el brillo") }
             }
         }
     }

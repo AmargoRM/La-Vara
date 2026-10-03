@@ -1,6 +1,10 @@
 package com.lavara.automation
 
 import com.lavara.actions.Action
+import com.lavara.actions.DndMode
+import com.lavara.actions.RingerMode
+import com.lavara.actions.SystemPanel
+import com.lavara.actions.VolumeStream
 import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
 import com.lavara.triggers.BatteryDirection
@@ -63,6 +67,13 @@ class AutomationJsonTest {
                     Action.OpenUrl("https://waze.com/ul?ll=9.93,-84.08"),
                     Action.Delay(10),
                     Action.RunAutomation("otra"),
+                    Action.Flashlight(on = false),
+                    Action.SetVolume(VolumeStream.RING, 30),
+                    Action.SetRingerMode(RingerMode.SILENT),
+                    Action.DoNotDisturb(DndMode.ALARMS),
+                    Action.SetBrightness(percent = 80),
+                    Action.SetBrightness(auto = true),
+                    Action.OpenSystemPanel(SystemPanel.MOBILE_DATA),
                 ),
                 onError = OnError.CONTINUE,
                 cooldownSeconds = 60,
@@ -135,5 +146,35 @@ class AutomationJsonTest {
         assertThrows(SerializationException::class.java) {
             AutomationJson.decode("""{"id":"a","name":"A","trigger":{"type":"terremoto"}}""")
         }
+    }
+
+    /** Los nombres de docs/FORMATO_JSON.md para las acciones del sistema. Nunca deben cambiar. */
+    @Test
+    fun accionesDelSistema_nombresFijos() {
+        val text = """{"id":"a","name":"A","trigger":{"type":"manual"},"actions":[
+            {"type":"flashlight","on":true},
+            {"type":"set_volume","stream":"media","percent":40},
+            {"type":"set_ringer_mode","mode":"vibrate"},
+            {"type":"do_not_disturb","mode":"off"},
+            {"type":"set_brightness","percent":20,"auto":false},
+            {"type":"open_system_panel","panel":"bluetooth"}
+        ]}"""
+        assertEquals(
+            listOf(
+                Action.Flashlight(true),
+                Action.SetVolume(VolumeStream.MEDIA, 40),
+                Action.SetRingerMode(RingerMode.VIBRATE),
+                Action.DoNotDisturb(DndMode.OFF),
+                Action.SetBrightness(20, auto = false),
+                Action.OpenSystemPanel(SystemPanel.BLUETOOTH),
+            ),
+            AutomationJson.decode(text).actions,
+        )
+    }
+
+    @Test
+    fun porcentajeFueraDeRango_esRechazado() {
+        assertThrows(IllegalArgumentException::class.java) { Action.SetVolume(percent = 101) }
+        assertThrows(IllegalArgumentException::class.java) { Action.SetBrightness(percent = 0) }
     }
 }
