@@ -99,6 +99,9 @@ fun AutomationsSection(
                 // Solo hace falta si alguna automatización activa abre apps.
                 openApps = automations.none { a -> a.enabled && a.actions.any { it is Action.OpenApp || it is Action.OpenUrl } } ||
                     container.actionExecutor.canOpenAppsInBackground(),
+                location = automations.none { it.enabled && it.trigger is Trigger.Location } ||
+                    (container.locationAccess.hasBackground() && container.locationAccess.isLocationOn()),
+                locationOn = container.locationAccess.isLocationOn(),
             )
         }
 
@@ -167,6 +170,9 @@ fun AutomationsSection(
                 onExactAlarms = { container.alarmScheduler.openExactAlarmSettings() },
                 onBattery = { container.batteryOptimization.requestExclusion() },
                 onOpenApps = { container.actionExecutor.openBackgroundAppsSettings() },
+                onLocation = {
+                    if (!health.locationOn) container.locationAccess.openLocationSettings() else container.locationAccess.openAppSettings()
+                },
             )
         }
 
@@ -263,8 +269,15 @@ fun AutomationsSection(
     }
 }
 
-private data class Health(val notifications: Boolean, val exactAlarms: Boolean, val battery: Boolean, val openApps: Boolean) {
-    val allOk get() = notifications && exactAlarms && battery && openApps
+private data class Health(
+    val notifications: Boolean,
+    val exactAlarms: Boolean,
+    val battery: Boolean,
+    val openApps: Boolean,
+    val location: Boolean,
+    val locationOn: Boolean,
+) {
+    val allOk get() = notifications && exactAlarms && battery && openApps && location
 }
 
 @Composable
@@ -274,6 +287,7 @@ private fun HealthCard(
     onExactAlarms: () -> Unit,
     onBattery: () -> Unit,
     onOpenApps: () -> Unit,
+    onLocation: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -299,6 +313,14 @@ private fun HealthCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedButton(onClick = onOpenApps) { Text("Permitir abrir apps") }
+            }
+            if (!health.location) {
+                Text(
+                    if (!health.locationOn) "Una automatización usa un lugar, pero la ubicación del teléfono está apagada."
+                    else "Una automatización usa un lugar. Para que funcione con La Vara cerrada, en Permisos → Ubicación elegí \"Permitir todo el tiempo\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = onLocation) { Text(if (!health.locationOn) "Encender la ubicación" else "Abrir Ajustes de La Vara") }
             }
         }
     }

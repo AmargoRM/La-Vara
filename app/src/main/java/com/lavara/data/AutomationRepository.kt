@@ -57,6 +57,7 @@ class AutomationRepository(
             is Trigger.Time -> "time"
             is Trigger.Battery -> "battery"
             is Trigger.Power -> "power"
+            is Trigger.Location -> "location"
             Trigger.Manual -> "manual"
         }
     }

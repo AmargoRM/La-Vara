@@ -8,6 +8,7 @@ import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
 import com.lavara.core.TimeText
 import com.lavara.triggers.BatteryDirection
+import com.lavara.triggers.LocationTransition
 import com.lavara.triggers.PowerEvent
 import com.lavara.triggers.Trigger
 import com.lavara.triggers.Weekday
@@ -66,6 +67,8 @@ fun daysText(days: List<Weekday>): String = when {
 fun describe(context: Context, trigger: Trigger): String = when (trigger) {
     is Trigger.Time -> "${daysText(trigger.days).replaceFirstChar { it.uppercase() }} a las ${timeText(context, trigger.time)}"
     is Trigger.Battery -> "Cuando la batería ${if (trigger.direction == BatteryDirection.BELOW) "baja a" else "sube a"} ${trigger.threshold} %"
+    is Trigger.Location -> (if (trigger.transition == LocationTransition.ENTER) "Al llegar a " else "Al irse de ") +
+        trigger.placeName.ifBlank { "la zona marcada" } + " (${trigger.radiusMeters} m)"
     is Trigger.Power -> if (trigger.event == PowerEvent.CONNECTED) "Al conectar el cargador" else "Al desconectar el cargador"
     Trigger.Manual -> "Solo al tocarla"
 }

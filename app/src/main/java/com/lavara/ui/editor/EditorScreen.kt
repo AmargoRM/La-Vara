@@ -5,6 +5,8 @@ import android.content.Context
 import android.text.format.DateFormat
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import com.lavara.system.device.InstalledApps
@@ -74,6 +76,8 @@ import com.lavara.conditions.Condition
 import com.lavara.core.AppContainer
 import com.lavara.core.TimeText
 import com.lavara.triggers.BatteryDirection
+import com.lavara.system.location.LocationAccess
+import com.lavara.triggers.LocationTransition
 import com.lavara.triggers.NextAlarm
 import com.lavara.triggers.PowerEvent
 import com.lavara.triggers.Trigger
@@ -216,6 +220,10 @@ private fun savedMessage(context: Context, container: AppContainer, automation: 
     val trigger = automation.trigger
     if (!automation.enabled) return "Guardada. Está desactivada: activala en Inicio."
     if (trigger is Trigger.Battery || trigger is Trigger.Power) return "Guardada. La Vara queda atenta a la batería y al cargador."
+    if (trigger is Trigger.Location) {
+        return if (container.locationAccess.hasBackground()) "Guardada. La Vara avisa cuando ${describe(context, trigger).lowercase()}."
+        else "Guardada, pero falta el permiso de ubicación \"Permitir todo el tiempo\"."
+    }
     if (trigger !is Trigger.Time) return "Guardada."
     val now = container.clock.now()
     val at = NextAlarm.after(trigger, now)
@@ -263,6 +271,13 @@ private fun parse(text: String) = TimeText.parseOrNull(text) ?: LocalTime.of(8, 
 @Composable
 private fun WhenStep(context: Context, container: AppContainer, draft: AutomationDraft, onChange: (AutomationDraft) -> Unit) {
     val trigger = draft.trigger
+    val access = container.locationAccess
+    var showMap by remember { mutableStateOf(false) }
+    // Sin la ubicación precisa el mapa igual abre, pero no puede centrarse donde estás.
+    val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        container.logger.info("Permisos", "Permiso de ubicación: ${if (result.values.any { it }) "concedido" else "negado"}")
+        showMap = true
+    }
     Text("¿Cuándo se dispara?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Choice("A una hora", trigger is Trigger.Time, Modifier.weight(1f)) {
@@ -276,6 +291,9 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
         }
         Choice("Cargador", trigger is Trigger.Power, Modifier.weight(1f)) {
             if (trigger !is Trigger.Power) onChange(draft.copy(trigger = Trigger.Power(PowerEvent.CONNECTED)))
+        }
+        Choice("Lugar", trigger is Trigger.Location, Modifier.weight(1f)) {
+            if (access.hasPrecise()) showMap = true else locationPermission.launch(LocationAccess.PRECISE)
         }
     }
 
@@ -328,6 +346,30 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
                 }
             }
         }
+        is Trigger.Location -> Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = trigger.placeName,
+                    onValueChange = { onChange(draft.copy(trigger = trigger.copy(placeName = it))) },
+                    label = { Text("Nombre del lugar (ej.: Casa)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Choice("Al llegar", trigger.transition == LocationTransition.ENTER, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(transition = LocationTransition.ENTER)))
+                    }
+                    Choice("Al irme", trigger.transition == LocationTransition.EXIT, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(transition = LocationTransition.EXIT)))
+                    }
+                }
+                Text(
+                    "Zona: círculo de ${trigger.radiusMeters} m alrededor de %.5f, %.5f.".format(trigger.latitude, trigger.longitude),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = { showMap = true }, modifier = Modifier.fillMaxWidth()) { Text("Cambiar la zona en el mapa") }
+            }
+        }
         is Trigger.Power -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Choice("Al conectar", trigger.event == PowerEvent.CONNECTED, Modifier.weight(1f)) {
                 onChange(draft.copy(trigger = trigger.copy(event = PowerEvent.CONNECTED)))
@@ -348,6 +390,36 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
             "$detail\nMientras esté activa vas a ver la notificación fija \"La Vara está activa\": Android exige ese aviso " +
                 "para que una app cerrada pueda escuchar la batería y el cargador.",
             style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+
+    if (trigger is Trigger.Location) {
+        Text(
+            "Android avisa al entrar o salir de la zona; puede tardar unos minutos en notarlo. Si ya estás adentro al guardar, " +
+                "no se dispara hasta que salgas y vuelvas.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        if (!access.hasBackground()) {
+            Text(
+                "Falta un permiso: para que funcione con La Vara cerrada, en Ajustes → Permisos → Ubicación elegí \"Permitir todo el tiempo\".",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedButton(onClick = { access.openAppSettings() }) { Text("Abrir Ajustes de La Vara") }
+        }
+    }
+
+    if (showMap) {
+        MapPicker(
+            initial = trigger as? Trigger.Location,
+            access = access,
+            onDismiss = { showMap = false },
+            onPick = { lat, lon, radius ->
+                showMap = false
+                val zone = (trigger as? Trigger.Location)?.copy(latitude = lat, longitude = lon, radiusMeters = radius)
+                    ?: Trigger.Location(lat, lon, radius)
+                onChange(draft.copy(trigger = zone))
+            },
         )
     }
 
