@@ -68,6 +68,26 @@ sealed interface Trigger {
         }
     }
 
+    /**
+     * Cuando el teléfono se conecta o se desconecta de un aparato Bluetooth (carro, audífonos, reloj).
+     * [deviceAddress] vacío = cualquier aparato. [deviceName] es solo para mostrar.
+     */
+    @Serializable
+    @SerialName("bluetooth")
+    data class Bluetooth(
+        val deviceAddress: String = "",
+        val deviceName: String = "",
+        val event: ConnectionEvent = ConnectionEvent.CONNECTED,
+    ) : Trigger
+
+    /** Cuando el teléfono se conecta o se desconecta de una red Wi-Fi. [ssid] vacío = cualquier red. */
+    @Serializable
+    @SerialName("wifi")
+    data class Wifi(
+        val ssid: String = "",
+        val event: ConnectionEvent = ConnectionEvent.CONNECTED,
+    ) : Trigger
+
     /** Solo se ejecuta a mano (botón, atajo u otra automatización). */
     @Serializable
     @SerialName("manual")
@@ -90,6 +110,15 @@ enum class LocationTransition {
 
     /** Al irse de la zona. */
     @SerialName("exit") EXIT,
+}
+
+@Serializable
+enum class ConnectionEvent {
+    /** Al conectarse. */
+    @SerialName("connected") CONNECTED,
+
+    /** Al desconectarse. */
+    @SerialName("disconnected") DISCONNECTED,
 }
 
 @Serializable

@@ -8,6 +8,7 @@ import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
 import com.lavara.core.TimeText
 import com.lavara.triggers.BatteryDirection
+import com.lavara.triggers.ConnectionEvent
 import com.lavara.triggers.LocationTransition
 import com.lavara.triggers.PowerEvent
 import com.lavara.triggers.Trigger
@@ -70,6 +71,10 @@ fun describe(context: Context, trigger: Trigger): String = when (trigger) {
     is Trigger.Location -> (if (trigger.transition == LocationTransition.ENTER) "Al llegar a " else "Al irse de ") +
         trigger.placeName.ifBlank { "la zona marcada" } + " (${trigger.radiusMeters} m)"
     is Trigger.Power -> if (trigger.event == PowerEvent.CONNECTED) "Al conectar el cargador" else "Al desconectar el cargador"
+    is Trigger.Bluetooth -> (if (trigger.event == ConnectionEvent.CONNECTED) "Al conectar el Bluetooth " else "Al desconectar el Bluetooth ") +
+        (trigger.deviceName.ifBlank { trigger.deviceAddress }.ifBlank { "de cualquier aparato" })
+    is Trigger.Wifi -> (if (trigger.event == ConnectionEvent.CONNECTED) "Al conectarse al Wi-Fi " else "Al desconectarse del Wi-Fi ") +
+        trigger.ssid.ifBlank { "(cualquier red)" }
     Trigger.Manual -> "Solo al tocarla"
 }
 

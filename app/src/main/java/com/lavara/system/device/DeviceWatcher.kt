@@ -38,7 +38,7 @@ class DeviceWatcher(
         if (needed && !DeviceWatchService.isRunning) {
             try {
                 ContextCompat.startForegroundService(context, intent)
-                logger.info(SOURCE, "Vigilancia de batería y cargador encendida ($reason)")
+                logger.info(SOURCE, "Vigilancia de batería, cargador y Wi-Fi encendida ($reason)")
             } catch (e: IllegalStateException) {
                 // Android 12+ no deja encenderla con La Vara en segundo plano, salvo excepciones
                 // (reinicio del teléfono, app sin ahorro de batería). Se reintenta al abrir La Vara.
@@ -51,7 +51,7 @@ class DeviceWatcher(
         } else if (!needed && DeviceWatchService.isRunning) {
             context.stopService(intent)
             settings.set(KEY_LAST_LEVEL, "")
-            logger.info(SOURCE, "Vigilancia de batería y cargador apagada: ninguna automatización activa la usa ($reason)")
+            logger.info(SOURCE, "Vigilancia de batería, cargador y Wi-Fi apagada: ninguna automatización activa la usa ($reason)")
         }
     }
 
@@ -75,6 +75,20 @@ class DeviceWatcher(
 
     suspend fun onPower(connected: Boolean, atMillis: Long) {
         runner().handle(TriggerEvent.PowerChanged(connected, atMillis))
+    }
+
+    /** Cambió el Wi-Fi. Solo pasa al motor si hay automatizaciones de Wi-Fi activas, para no llenar los registros. */
+    suspend fun onWifi(ssid: String?, connected: Boolean, atMillis: Long) {
+        val wifi = automations.all().filter { it.enabled && it.trigger is Trigger.Wifi }
+        if (wifi.isEmpty()) return
+        if (ssid == null && wifi.any { (it.trigger as Trigger.Wifi).ssid.isNotBlank() }) {
+            logger.warn(
+                "Wi-Fi",
+                "Android no dijo el nombre de la red. Para reconocer redes por nombre, La Vara necesita la ubicación " +
+                    "\"Permitir todo el tiempo\" y la ubicación del teléfono encendida.",
+            )
+        }
+        runner().handle(TriggerEvent.WifiChanged(ssid, connected, atMillis))
     }
 
     private companion object {
