@@ -82,6 +82,9 @@ import com.lavara.conditions.Condition
 import com.lavara.core.AppContainer
 import com.lavara.core.TimeText
 import com.lavara.triggers.BatteryDirection
+import com.lavara.triggers.ConnectionEvent
+import com.lavara.system.connectivity.BluetoothDevices
+import com.lavara.system.connectivity.WifiWatcher
 import com.lavara.system.location.LocationAccess
 import com.lavara.triggers.LocationTransition
 import com.lavara.triggers.NextAlarm
@@ -230,6 +233,11 @@ private fun savedMessage(context: Context, container: AppContainer, automation: 
         return if (container.locationAccess.hasBackground()) "Guardada. La Vara avisa cuando ${describe(context, trigger).lowercase()}."
         else "Guardada, pero falta el permiso de ubicación \"Permitir todo el tiempo\"."
     }
+    if (trigger is Trigger.Bluetooth) {
+        return if (BluetoothDevices.hasPermission(context)) "Guardada. La Vara avisa ${describe(context, trigger).lowercase()}."
+        else "Guardada, pero falta el permiso \"Dispositivos cercanos\"."
+    }
+    if (trigger is Trigger.Wifi) return "Guardada. La Vara queda atenta al Wi-Fi."
     if (trigger !is Trigger.Time) return "Guardada."
     val now = container.clock.now()
     val at = NextAlarm.after(trigger, now)
@@ -284,6 +292,16 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
         container.logger.info("Permisos", "Permiso de ubicación: ${if (result.values.any { it }) "concedido" else "negado"}")
         showMap = true
     }
+    var btGranted by remember { mutableStateOf(BluetoothDevices.hasPermission(context)) }
+    val bluetoothPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        container.logger.info("Permisos", "Permiso de dispositivos cercanos (Bluetooth): ${if (granted) "concedido" else "negado"}")
+        btGranted = granted
+    }
+    var wifiNote by remember { mutableStateOf<String?>(null) }
+    val wifiLocationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        container.logger.info("Permisos", "Permiso de ubicación (para el nombre del Wi-Fi): ${if (result.values.any { it }) "concedido" else "negado"}")
+        wifiNote = if (result.values.any { it }) "Listo. Tocá de nuevo \"Usar la red actual\"." else "Sin el permiso de ubicación, Android no dice el nombre de la red."
+    }
     Text("¿Cuándo se dispara?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Choice("A una hora", trigger is Trigger.Time, Modifier.weight(1f)) {
@@ -300,6 +318,15 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
         }
         Choice("Lugar", trigger is Trigger.Location, Modifier.weight(1f)) {
             if (access.hasPrecise()) showMap = true else locationPermission.launch(LocationAccess.PRECISE)
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Choice("Bluetooth", trigger is Trigger.Bluetooth, Modifier.weight(1f)) {
+            if (trigger !is Trigger.Bluetooth) onChange(draft.copy(trigger = Trigger.Bluetooth()))
+            if (!btGranted) BluetoothDevices.PERMISSION?.let { bluetoothPermission.launch(it) }
+        }
+        Choice("Wi-Fi", trigger is Trigger.Wifi, Modifier.weight(1f)) {
+            if (trigger !is Trigger.Wifi) onChange(draft.copy(trigger = Trigger.Wifi()))
         }
     }
 
@@ -376,6 +403,95 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
                 OutlinedButton(onClick = { showMap = true }, modifier = Modifier.fillMaxWidth()) { Text("Cambiar la zona en el mapa") }
             }
         }
+        is Trigger.Bluetooth -> Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Choice("Al conectar", trigger.event == ConnectionEvent.CONNECTED, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(event = ConnectionEvent.CONNECTED)))
+                    }
+                    Choice("Al desconectar", trigger.event == ConnectionEvent.DISCONNECTED, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(event = ConnectionEvent.DISCONNECTED)))
+                    }
+                }
+                if (!btGranted) {
+                    Text(
+                        "Falta el permiso \"Dispositivos cercanos\": sin él, Android no le avisa a La Vara qué aparato se conectó.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = { BluetoothDevices.PERMISSION?.let { bluetoothPermission.launch(it) } }) { Text("Permitir") }
+                    OutlinedButton(onClick = { access.openAppSettings() }) { Text("Abrir Ajustes de La Vara") }
+                } else {
+                    val paired = remember(btGranted) { BluetoothDevices.paired(context) }
+                    var open by remember { mutableStateOf(false) }
+                    Box {
+                        OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Aparato: " + trigger.deviceName.ifBlank { trigger.deviceAddress }.ifBlank { "cualquiera" })
+                        }
+                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            DropdownMenuItem(text = { Text("Cualquier aparato") }, onClick = {
+                                open = false
+                                onChange(draft.copy(trigger = trigger.copy(deviceAddress = "", deviceName = "")))
+                            })
+                            paired.forEach { device ->
+                                DropdownMenuItem(text = { Text(device.name) }, onClick = {
+                                    open = false
+                                    onChange(draft.copy(trigger = trigger.copy(deviceAddress = device.address, deviceName = device.name)))
+                                })
+                            }
+                        }
+                    }
+                    if (paired.isEmpty()) {
+                        Text(
+                            "No veo aparatos vinculados. Encendé el Bluetooth y vinculá el aparato en los ajustes del teléfono.",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
+        }
+        is Trigger.Wifi -> Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Choice("Al conectarme", trigger.event == ConnectionEvent.CONNECTED, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(event = ConnectionEvent.CONNECTED)))
+                    }
+                    Choice("Al desconectarme", trigger.event == ConnectionEvent.DISCONNECTED, Modifier.weight(1f)) {
+                        onChange(draft.copy(trigger = trigger.copy(event = ConnectionEvent.DISCONNECTED)))
+                    }
+                }
+                OutlinedTextField(
+                    value = trigger.ssid,
+                    onValueChange = { onChange(draft.copy(trigger = trigger.copy(ssid = it))) },
+                    label = { Text("Nombre de la red (vacío = cualquiera)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(onClick = {
+                    if (!access.hasPrecise()) {
+                        wifiLocationPermission.launch(LocationAccess.PRECISE)
+                    } else {
+                        val current = WifiWatcher.currentSsid(context)
+                        if (current != null) {
+                            wifiNote = null
+                            onChange(draft.copy(trigger = trigger.copy(ssid = current)))
+                        } else {
+                            wifiNote = "No pude leer la red actual. ¿Estás conectado a un Wi-Fi y con la ubicación del teléfono encendida?"
+                        }
+                    }
+                }, modifier = Modifier.fillMaxWidth()) { Text("Usar la red actual") }
+                wifiNote?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                if (trigger.ssid.isNotBlank() && !access.hasBackground()) {
+                    Text(
+                        "Para reconocer la red por nombre con La Vara cerrada, Android pide la ubicación \"Permitir todo el tiempo\" " +
+                            "(Ajustes → Permisos → Ubicación).",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedButton(onClick = { access.openAppSettings() }) { Text("Abrir Ajustes de La Vara") }
+                }
+            }
+        }
         is Trigger.Power -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Choice("Al conectar", trigger.event == PowerEvent.CONNECTED, Modifier.weight(1f)) {
                 onChange(draft.copy(trigger = trigger.copy(event = PowerEvent.CONNECTED)))
@@ -386,15 +502,15 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
         }
     }
 
-    if (trigger is Trigger.Battery || trigger is Trigger.Power) {
-        val detail = if (trigger is Trigger.Battery) {
-            "${describe(context, trigger)}: se dispara una vez al cruzar ese número, no en cada cambio."
-        } else {
-            "${describe(context, trigger)}, con cable o base inalámbrica."
+    if (trigger is Trigger.Battery || trigger is Trigger.Power || trigger is Trigger.Wifi) {
+        val detail = when (trigger) {
+            is Trigger.Battery -> "${describe(context, trigger)}: se dispara una vez al cruzar ese número, no en cada cambio."
+            is Trigger.Power -> "${describe(context, trigger)}, con cable o base inalámbrica."
+            else -> "${describe(context, trigger)}."
         }
         Text(
             "$detail\nMientras esté activa vas a ver la notificación fija \"La Vara está activa\": Android exige ese aviso " +
-                "para que una app cerrada pueda escuchar la batería y el cargador.",
+                "para que una app cerrada pueda escuchar la batería, el cargador y el Wi-Fi.",
             style = MaterialTheme.typography.bodyMedium,
         )
     }

@@ -37,6 +37,16 @@ sealed interface TriggerEvent {
         override val dedupKey: String = "location:$automationId:${if (entered) "enter" else "exit"}:$atMillis"
     }
 
+    /** Se conectó ([connected] = true) o se desconectó el aparato Bluetooth [address] ([name] para mostrar). */
+    data class BluetoothChanged(val address: String, val name: String, val connected: Boolean, val atMillis: Long) : TriggerEvent {
+        override val dedupKey: String = "bluetooth:$address:${if (connected) "connected" else "disconnected"}:$atMillis"
+    }
+
+    /** Se conectó ([connected] = true) o se desconectó la red Wi-Fi [ssid] (null = Android no dijo el nombre). */
+    data class WifiChanged(val ssid: String?, val connected: Boolean, val atMillis: Long) : TriggerEvent {
+        override val dedupKey: String = "wifi:${ssid.orEmpty()}:${if (connected) "connected" else "disconnected"}:$atMillis"
+    }
+
     /** El usuario pidió ejecutar [automationId] a mano. [requestId] distingue cada pedido. */
     data class ManualRun(val automationId: String, val requestId: String) : TriggerEvent {
         override val dedupKey: String = "manual:$requestId"
@@ -59,6 +69,14 @@ object TriggerMatcher {
         is Trigger.Location -> event is TriggerEvent.LocationChanged && event.automationId == automationId &&
             event.entered == (trigger.transition == LocationTransition.ENTER)
 
+        is Trigger.Bluetooth -> event is TriggerEvent.BluetoothChanged &&
+            event.connected == (trigger.event == ConnectionEvent.CONNECTED) &&
+            (trigger.deviceAddress.isBlank() || trigger.deviceAddress.equals(event.address, ignoreCase = true))
+
+        is Trigger.Wifi -> event is TriggerEvent.WifiChanged &&
+            event.connected == (trigger.event == ConnectionEvent.CONNECTED) &&
+            (trigger.ssid.isBlank() || trigger.ssid.trim().equals(event.ssid?.trim(), ignoreCase = true))
+
         Trigger.Manual -> false
     } || (event is TriggerEvent.ManualRun && event.automationId == automationId)
 
@@ -71,9 +89,9 @@ object TriggerMatcher {
         }
     }
 
-    /** true si alguna automatización activa necesita que La Vara escuche la batería o el cargador. */
+    /** true si alguna automatización activa necesita que La Vara escuche la batería, el cargador o el Wi-Fi. */
     fun needsDeviceWatch(automations: List<Automation>): Boolean =
-        automations.any { it.enabled && (it.trigger is Trigger.Battery || it.trigger is Trigger.Power) }
+        automations.any { it.enabled && (it.trigger is Trigger.Battery || it.trigger is Trigger.Power || it.trigger is Trigger.Wifi) }
 
     private fun Trigger.Time.timeOfDay() = TimeText.parseOrNull(time)!!
 }

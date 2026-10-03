@@ -82,6 +82,27 @@ Al escribir una automatización a mano, alcanza con `id`, `name`, `trigger` y `a
 - Si el teléfono ya está adentro cuando se guarda, no se dispara hasta salir y volver a entrar.
 - Necesita el permiso de ubicación "Permitir todo el tiempo" y la ubicación del teléfono encendida. Android puede tardar unos minutos en notar la entrada o salida.
 
+### `bluetooth`: al conectar o desconectar un aparato Bluetooth
+
+```json
+{ "type": "bluetooth", "deviceAddress": "00:11:22:AA:BB:CC", "deviceName": "Carro", "event": "connected" }
+```
+
+- `deviceAddress` (opcional, por defecto `""`): dirección del aparato. Vacío = cualquier aparato.
+- `deviceName` (opcional, por defecto `""`): nombre para mostrar.
+- `event` (opcional, por defecto `"connected"`): `"connected"` o `"disconnected"`.
+- Necesita el permiso "Dispositivos cercanos" (Android 12+). Funciona con La Vara cerrada.
+
+### `wifi`: al conectarse o desconectarse de una red Wi-Fi
+
+```json
+{ "type": "wifi", "ssid": "Casa", "event": "connected" }
+```
+
+- `ssid` (opcional, por defecto `""`): nombre de la red, sin importar mayúsculas. Vacío = cualquier red.
+- `event` (opcional, por defecto `"connected"`): `"connected"` o `"disconnected"`.
+- Usa la notificación fija "La Vara está activa". Para reconocer la red por nombre hace falta la ubicación "Permitir todo el tiempo".
+
 ### `manual`: solo a mano
 
 ```json

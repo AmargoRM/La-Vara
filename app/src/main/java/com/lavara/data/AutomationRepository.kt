@@ -58,6 +58,8 @@ class AutomationRepository(
             is Trigger.Battery -> "battery"
             is Trigger.Power -> "power"
             is Trigger.Location -> "location"
+            is Trigger.Bluetooth -> "bluetooth"
+            is Trigger.Wifi -> "wifi"
             Trigger.Manual -> "manual"
         }
     }

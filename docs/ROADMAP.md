@@ -84,7 +84,7 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - [ ] **S10 Bitácora de campo:** acción "registrar en bitácora" (hora, punto, automatización, nota) con exportación CSV/GeoJSON.
 - [ ] **S11 Compartir hacia La Vara:** recibir texto, URL, ubicación o imagen desde el menú Compartir y pasarlo como variables a una automatización. Convertir coordenadas a CRTM05 (EPSG:5367).
 - [ ] **S12 Notificaciones entrantes:** `NotificationListenerService` con filtros por app, título y texto.
-- [ ] **S13 Bluetooth y Wi-Fi:** conectado/desconectado a un dispositivo emparejado o a una red concreta.
+- [x] **S13 Bluetooth y Wi-Fi:** conectado/desconectado a un dispositivo emparejado o a una red concreta.
 - [ ] **S14 Widget** de pantalla de inicio con automatizaciones favoritas.
 - [ ] **S15 Más acciones del sistema:** vibrar, sonido, volumen, multimedia, abrir URL, abrir ajuste, compartir texto, copiar al portapapeles, brillo (con permiso especial).
   - [x] Primera parte: linterna, volumen, modo de sonido, No molestar, brillo y abrir el interruptor de Wi-Fi, datos, Bluetooth, ubicación, NFC y modo avión.

@@ -30,6 +30,15 @@
         android:name="android.permission.WRITE_SETTINGS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Disparador por Bluetooth: saber qué aparato se conectó. Android 12+ lo pide al usuario
+         ("Dispositivos cercanos") recién al elegir ese disparador; antes alcanzaba con BLUETOOTH. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <!-- Disparador por Wi-Fi: saber a qué red se conectó el teléfono. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
     <!-- Ver las apps que aparecen en el menú de apps, para elegir cuál abrir (Android 11+ lo exige). -->
     <queries>
         <intent>
@@ -101,6 +110,16 @@
         <receiver
             android:name=".system.location.GeofenceReceiver"
             android:exported="false" />
+
+        <!-- Avisos protegidos del sistema (otras apps no pueden enviarlos). Llegan con La Vara cerrada. -->
+        <receiver
+            android:name=".system.connectivity.BluetoothReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name=".system.device.DeviceWatchService"
