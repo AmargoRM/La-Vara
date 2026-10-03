@@ -592,19 +592,31 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                             }
                         }
                         is Action.OpenUrl -> {
-                            var text by remember(index, action) { mutableStateOf(action.url) }
-                            val valid = text.startsWith("http://") || text.startsWith("https://")
+                            // El campo arranca vacío; lo que se escriba o pegue se limpia antes de guardarlo.
+                            val saved = if (action.url == "https://") "" else action.url
+                            var typed by remember(index) { mutableStateOf(saved) }
+                            // Si la acción cambió por otro lado (por ejemplo, al moverla), se muestra la guardada.
+                            val text = if ((Action.OpenUrl.normalize(typed) ?: "https://") == action.url) typed else saved
+                            val normalized = Action.OpenUrl.normalize(text)
                             OutlinedTextField(
                                 value = text,
                                 onValueChange = { new ->
-                                    text = new.trim()
-                                    if (text.startsWith("http://") || text.startsWith("https://")) replace(Action.OpenUrl(text))
+                                    typed = new
+                                    replace(Action.OpenUrl(Action.OpenUrl.normalize(new) ?: "https://"))
                                 },
                                 label = { Text("Enlace") },
-                                singleLine = true,
-                                isError = !valid,
+                                placeholder = { Text("Pegá el enlace (ej.: waze.com/ul?q=casa)") },
+                                isError = text.isNotBlank() && normalized == null,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                                supportingText = { Text(if (valid) "Se abre en el navegador o en la app que corresponda." else "Tiene que empezar con https://") },
+                                supportingText = {
+                                    Text(
+                                        when {
+                                            normalized != null -> "Se va a abrir: ${Action.OpenUrl(normalized).host}"
+                                            text.isBlank() -> "Se abre en el navegador o en la app que corresponda."
+                                            else -> "No encuentro un sitio en ese texto. Pegá el enlace tal como lo copiaste."
+                                        },
+                                    )
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
