@@ -72,7 +72,8 @@ fun describe(context: Context, trigger: Trigger): String = when (trigger) {
     is Trigger.Time -> "${daysText(trigger.days).replaceFirstChar { it.uppercase() }} a las ${timeText(context, trigger.time)}"
     is Trigger.Battery -> "Cuando la batería ${if (trigger.direction == BatteryDirection.BELOW) "baja a" else "sube a"} ${trigger.threshold} %"
     is Trigger.Location -> (if (trigger.transition == LocationTransition.ENTER) "Al llegar a " else "Al irse de ") +
-        trigger.placeName.ifBlank { "la zona marcada" } + " (${trigger.radiusMeters} m)"
+        trigger.placeName.ifBlank { "la zona marcada" } + " (${trigger.radiusMeters} m)" +
+        if (trigger.transition == LocationTransition.ENTER && trigger.dwellMinutes > 0) " y quedarme ${trigger.dwellMinutes} min" else ""
     is Trigger.Power -> if (trigger.event == PowerEvent.CONNECTED) "Al conectar el cargador" else "Al desconectar el cargador"
     is Trigger.Bluetooth -> (if (trigger.event == ConnectionEvent.CONNECTED) "Al conectar el Bluetooth " else "Al desconectar el Bluetooth ") +
         (trigger.deviceName.ifBlank { trigger.deviceAddress }.ifBlank { "de cualquier aparato" })
@@ -120,6 +121,11 @@ fun actionTitle(action: Action) = when (action) {
     is Action.Navigate -> "Navegar con ${action.app.label}"
     is Action.SendSms -> "SMS a ${action.recipient}"
     is Action.TapInApp -> "Tocar \"${action.button}\""
+    is Action.Vibrate -> "Vibrar"
+    is Action.CopyToClipboard -> "Copiar al portapapeles"
+    is Action.ShareText -> "Compartir texto"
+    is Action.MediaControl -> "Música: ${action.command.label}"
+    is Action.IfElse -> "Si… si no…"
 }
 
 /** Resumen de una línea: "Todos los días a las 8:00 a. m. · si la batería está sobre 20 % · mostrar notificación". */

@@ -26,7 +26,9 @@ class GeofenceReceiver : BroadcastReceiver() {
                     // Error 1000 = la ubicación se apagó: Android borró las zonas.
                     return@launch
                 }
-                val entered = event.geofenceTransition == Geofence.GEOFENCE_TRANSITION_ENTER
+                // Quedarse X minutos (DWELL) cuenta como llegar: esas zonas solo vigilan eso.
+                val entered = event.geofenceTransition == Geofence.GEOFENCE_TRANSITION_ENTER ||
+                    event.geofenceTransition == Geofence.GEOFENCE_TRANSITION_DWELL
                 val now = container.clock.now().toInstant().toEpochMilli()
                 for (geofence in event.triggeringGeofences.orEmpty()) {
                     container.automationRunner.handle(TriggerEvent.LocationChanged(geofence.requestId, entered, now))

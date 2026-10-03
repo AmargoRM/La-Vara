@@ -54,8 +54,14 @@ sealed interface Trigger {
         val radiusMeters: Int = 200,
         val transition: LocationTransition = LocationTransition.ENTER,
         val placeName: String = "",
+        /**
+         * Solo al llegar: minutos que hay que quedarse en la zona antes de que se dispare. 0 = apenas llega.
+         * Si se va antes, no se dispara.
+         */
+        val dwellMinutes: Int = 0,
     ) : Trigger {
         init {
+            require(dwellMinutes in 0..MAX_DWELL_MINUTES) { "dwellMinutes debe estar entre 0 y $MAX_DWELL_MINUTES, no $dwellMinutes" }
             require(latitude in -90.0..90.0) { "latitude debe estar entre -90 y 90, no $latitude" }
             require(longitude in -180.0..180.0) { "longitude debe estar entre -180 y 180, no $longitude" }
             require(radiusMeters in MIN_RADIUS..MAX_RADIUS) { "radiusMeters debe estar entre $MIN_RADIUS y $MAX_RADIUS, no $radiusMeters" }
@@ -65,6 +71,7 @@ sealed interface Trigger {
             /** Android recomienda al menos 100 m: con menos, la ubicación no es lo bastante precisa. */
             const val MIN_RADIUS = 100
             const val MAX_RADIUS = 50_000
+            const val MAX_DWELL_MINUTES = 240
         }
     }
 

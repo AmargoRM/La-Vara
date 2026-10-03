@@ -6,7 +6,12 @@ import android.os.Build
 import android.text.format.DateFormat
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.content.Context
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lavara.actions.Action
+import com.lavara.actions.flatten
 import com.lavara.actions.needsDndAccess
 import com.lavara.actions.opensScreen
 import com.lavara.system.accessibility.TapService
@@ -73,6 +79,13 @@ fun AutomationsSection(
     // Hora elegida que todavía falta confirmar: automatización y hora nueva "HH:mm".
     var pendingTime by remember { mutableStateOf<Pair<Automation, Trigger.Time>?>(null) }
     var pendingDelete by remember { mutableStateOf<Automation?>(null) }
+    // Cómo se ve la lista; se recuerda en el teléfono.
+    val listPrefs = remember { context.getSharedPreferences("lista", Context.MODE_PRIVATE) }
+    var filter by remember { mutableStateOf(ListFilter.entries.firstOrNull { it.name == listPrefs.getString("filtro", null) } ?: ListFilter.ALL) }
+    var newestFirst by remember { mutableStateOf(listPrefs.getBoolean("nuevas_primero", true)) }
+    var compact by remember { mutableStateOf(listPrefs.getBoolean("compacta", true)) }
+    // Encender (true) o apagar (false) todas, esperando confirmación.
+    var bulk by remember { mutableStateOf<Boolean?>(null) }
     // Hasta qué momento el usuario ya vio o descartó los errores; los anteriores no se avisan en Inicio.
     var errorsSeenAt by remember { mutableStateOf(Long.MAX_VALUE) }
     LaunchedEffect(Unit) { errorsSeenAt = container.settingsRepository.get(KEY_ERRORS_SEEN)?.toLongOrNull() ?: 0L }
@@ -106,11 +119,11 @@ fun AutomationsSection(
                 // No molestar y modo silencio necesitan "Acceso a No molestar"; el brillo, "Modificar ajustes del sistema".
                 dnd = automations.none { a -> a.enabled && a.actions.any { it.needsDndAccess() } } ||
                     container.actionExecutor.systemControls.hasDndAccess(),
-                brightness = automations.none { a -> a.enabled && a.actions.any { it is Action.SetBrightness } } ||
+                brightness = automations.none { a -> a.enabled && a.actions.flatMap { it.flatten() }.any { it is Action.SetBrightness } } ||
                     container.actionExecutor.systemControls.canWriteSettings(),
-                sms = automations.none { a -> a.enabled && a.actions.any { it is Action.SendSms } } ||
+                sms = automations.none { a -> a.enabled && a.actions.flatMap { it.flatten() }.any { it is Action.SendSms } } ||
                     container.actionExecutor.smsSender.hasPermission(),
-                accessibility = automations.none { a -> a.enabled && a.actions.any { it is Action.TapInApp } } ||
+                accessibility = automations.none { a -> a.enabled && a.actions.flatMap { it.flatten() }.any { it is Action.TapInApp } } ||
                     TapService.isEnabled(context),
                 notificationAccess = !TriggerMatcher.needsNotificationAccess(automations) || NotificationWatchService.isEnabled(context),
                 location = automations.none { it.enabled && it.trigger is Trigger.Location } ||
@@ -171,12 +184,44 @@ fun AutomationsSection(
             )
         }
 
-        Text("Mis automatizaciones", style = MaterialTheme.typography.titleMedium)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Mis automatizaciones", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Box {
+                var listMenu by remember { mutableStateOf(false) }
+                TextButton(onClick = { listMenu = true }) { Text("Todas ⋮") }
+                DropdownMenu(expanded = listMenu, onDismissRequest = { listMenu = false }) {
+                    DropdownMenuItem(text = { Text("Encender todas") }, onClick = { listMenu = false; bulk = true })
+                    DropdownMenuItem(text = { Text("Apagar todas") }, onClick = { listMenu = false; bulk = false })
+                }
+            }
+        }
         if (automations.isEmpty()) Text("Todavía no hay ninguna. Tocá \"Nueva\" para crear la primera.", style = MaterialTheme.typography.bodyMedium)
+        if (automations.isNotEmpty()) {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ListFilter.entries.forEach { option ->
+                    val count = automations.count { option.accepts(it) }
+                    FilterChip(selected = filter == option, onClick = { filter = option; listPrefs.edit().putString("filtro", option.name).apply() }, label = { Text("${option.label} ($count)") })
+                }
+                FilterChip(
+                    selected = false,
+                    onClick = { newestFirst = !newestFirst; listPrefs.edit().putBoolean("nuevas_primero", newestFirst).apply() },
+                    label = { Text(if (newestFirst) "Nuevas primero ↓" else "Viejas primero ↑") },
+                )
+                FilterChip(
+                    selected = compact,
+                    onClick = { compact = !compact; listPrefs.edit().putBoolean("compacta", compact).apply() },
+                    label = { Text("Lista compacta") },
+                )
+            }
+        }
+        val shown = automations.filter { filter.accepts(it) }
+            .let { list -> if (newestFirst) list.sortedByDescending { it.createdAt } else list.sortedBy { it.createdAt } }
+        if (automations.isNotEmpty() && shown.isEmpty()) Text("Ninguna con este filtro.", style = MaterialTheme.typography.bodyMedium)
 
-        automations.forEach { automation ->
+        shown.forEach { automation ->
             AutomationCard(
                 automation = automation,
+                compact = compact,
                 onOpen = { onEdit(automation.id) },
                 onToggle = { enabled ->
                     if (enabled && !container.actionExecutor.canNotify() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -213,6 +258,37 @@ fun AutomationsSection(
             )
         }
         note?.let { Text(it, color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyMedium) }
+    }
+
+    bulk?.let { enable ->
+        val affected = automations.filter { it.enabled != enable }
+        AlertDialog(
+            onDismissRequest = { bulk = null },
+            title = { Text(if (enable) "¿Encender todas?" else "¿Apagar todas?") },
+            text = {
+                Text(
+                    when {
+                        affected.isEmpty() -> if (enable) "Ya están todas encendidas." else "Ya están todas apagadas."
+                        enable -> "Se encienden ${affected.size}: ${affected.joinToString { it.name }}. Ojo: incluye los ejemplos y las que envían SMS, si las hay."
+                        else -> "Se apagan ${affected.size}. Ninguna se va a disparar hasta que la vuelvas a encender. No se borra nada."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(enabled = affected.isNotEmpty(), onClick = {
+                    bulk = null
+                    scope.launch {
+                        val now = container.clock.now().toInstant().toEpochMilli()
+                        affected.forEach { container.automationRepository.save(it.copy(enabled = enable, updatedAt = now)) }
+                        val what = if (enable) "encendidas" else "apagadas"
+                        container.logger.info("Automatizaciones", "${affected.size} automatizaciones $what de una vez")
+                        container.refreshTriggers("todas $what")
+                        note = "${affected.size} automatizaciones $what."
+                    }
+                }) { Text(if (enable) "Encender" else "Apagar") }
+            },
+            dismissButton = { TextButton(onClick = { bulk = null }) { Text("Cancelar") } },
+        )
     }
 
     pendingTime?.let { (automation, trigger) ->
@@ -368,9 +444,17 @@ private fun HealthCard(
     }
 }
 
+/** Filtro de la lista de automatizaciones. */
+private enum class ListFilter(val label: String, val accepts: (Automation) -> Boolean) {
+    ALL("Todas", { true }),
+    ON("Activas", { it.enabled }),
+    OFF("Apagadas", { !it.enabled }),
+}
+
 @Composable
 private fun AutomationCard(
     automation: Automation,
+    compact: Boolean,
     onOpen: () -> Unit,
     onToggle: (Boolean) -> Unit,
     onChangeTime: (Trigger.Time) -> Unit,
@@ -380,6 +464,30 @@ private fun AutomationCard(
 ) {
     val context = LocalContext.current
     var menu by remember { mutableStateOf(false) }
+    if (compact) {
+        // Una sola fila: nombre, cuándo se dispara, menú y el interruptor.
+        Card(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
+            Row(Modifier.padding(start = 14.dp, end = 8.dp, top = 2.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+                    Text(automation.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(describe(context, automation.trigger), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Box {
+                    TextButton(onClick = { menu = true }) { Text("⋮") }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Probar ahora") }, onClick = { menu = false; onRunNow() })
+                        val trigger = automation.trigger
+                        if (trigger is Trigger.Time) DropdownMenuItem(text = { Text("Cambiar hora") }, onClick = { menu = false; onChangeTime(trigger) })
+                        DropdownMenuItem(text = { Text("Editar") }, onClick = { menu = false; onOpen() })
+                        DropdownMenuItem(text = { Text("Duplicar") }, onClick = { menu = false; onDuplicate() })
+                        DropdownMenuItem(text = { Text("Eliminar") }, onClick = { menu = false; onDelete() })
+                    }
+                }
+                Switch(checked = automation.enabled, onCheckedChange = onToggle)
+            }
+        }
+        return
+    }
     Card(Modifier.fillMaxWidth().clickable(onClick = onOpen)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {

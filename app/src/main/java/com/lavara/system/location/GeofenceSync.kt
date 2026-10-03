@@ -38,12 +38,19 @@ class GeofenceSync(
         if (zones.size > MAX_ZONES) logger.warn(SOURCE, "Android vigila hasta $MAX_ZONES zonas; se usan las primeras $MAX_ZONES")
         val geofences = zones.take(MAX_ZONES).map { automation ->
             val trigger = automation.trigger as Trigger.Location
+            val dwell = trigger.transition == LocationTransition.ENTER && trigger.dwellMinutes > 0
             Geofence.Builder()
                 .setRequestId(automation.id)
                 .setCircularRegion(trigger.latitude, trigger.longitude, trigger.radiusMeters.toFloat())
                 .setTransitionTypes(
-                    if (trigger.transition == LocationTransition.ENTER) Geofence.GEOFENCE_TRANSITION_ENTER else Geofence.GEOFENCE_TRANSITION_EXIT,
+                    when {
+                        // "Quedarse X minutos": Android avisa recién cuando pasó ese tiempo adentro.
+                        dwell -> Geofence.GEOFENCE_TRANSITION_DWELL
+                        trigger.transition == LocationTransition.ENTER -> Geofence.GEOFENCE_TRANSITION_ENTER
+                        else -> Geofence.GEOFENCE_TRANSITION_EXIT
+                    },
                 )
+                .apply { if (dwell) setLoiteringDelay(trigger.dwellMinutes * 60_000) }
                 .setExpirationDuration(Geofence.NEVER_EXPIRE)
                 .build()
         }

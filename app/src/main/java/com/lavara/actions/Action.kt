@@ -1,5 +1,6 @@
 package com.lavara.actions
 
+import com.lavara.conditions.Condition
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -206,7 +207,66 @@ sealed interface Action {
         val button: String = "",
         val waitSeconds: Int = 5,
     ) : Action
+
+    /** Hace vibrar el teléfono [millis] milisegundos. No pide permisos especiales. */
+    @Serializable
+    @SerialName("vibrate")
+    data class Vibrate(
+        val millis: Long = 500,
+    ) : Action {
+        init {
+            require(millis in 1..10_000) { "millis debe estar entre 1 y 10000, no $millis" }
+        }
+    }
+
+    /** Copia [text] al portapapeles. [text] acepta variables. El texto nunca se escribe en los registros. */
+    @Serializable
+    @SerialName("copy_to_clipboard")
+    data class CopyToClipboard(
+        val text: String = "",
+    ) : Action
+
+    /** Abre el menú Compartir de Android con [text], para elegir a qué app mandarlo. [text] acepta variables. */
+    @Serializable
+    @SerialName("share_text")
+    data class ShareText(
+        val text: String = "",
+    ) : Action
+
+    /** Controla la música o el video que esté sonando, en cualquier app (como los botones de los audífonos). */
+    @Serializable
+    @SerialName("media_control")
+    data class MediaControl(
+        val command: MediaCommand = MediaCommand.PLAY_PAUSE,
+    ) : Action
+
+    /**
+     * Si se cumplen [conditions] (todas si [matchAll], alguna si no), hace [then]; si no, hace [otherwise].
+     * Lista de condiciones vacía = se cumple. Dentro de un "si", las esperas son de 10 segundos como máximo.
+     */
+    @Serializable
+    @SerialName("if")
+    data class IfElse(
+        val conditions: List<Condition> = emptyList(),
+        val matchAll: Boolean = true,
+        val then: List<Action> = emptyList(),
+        val otherwise: List<Action> = emptyList(),
+    ) : Action
 }
+
+/** Botón de música de [Action.MediaControl]. */
+@Serializable
+enum class MediaCommand(val label: String) {
+    @SerialName("play_pause") PLAY_PAUSE("reproducir o pausar"),
+    @SerialName("play") PLAY("reproducir"),
+    @SerialName("pause") PAUSE("pausar"),
+    @SerialName("next") NEXT("siguiente"),
+    @SerialName("previous") PREVIOUS("anterior"),
+}
+
+/** Las acciones de adentro de un "si" (las dos ramas); para las demás, ninguna. */
+val Action.nested: List<Action>
+    get() = if (this is Action.IfElse) then + otherwise else emptyList()
 
 /** App con la que navega [Action.Navigate]. */
 @Serializable
@@ -218,16 +278,20 @@ enum class NavigationApp(val label: String) {
 /** Si la acción abre otra app o pantalla: con La Vara cerrada necesita "Mostrar sobre otras apps". */
 fun Action.opensScreen(): Boolean = when (this) {
     is Action.OpenApp, is Action.OpenUrl, is Action.OpenSystemPanel,
-    is Action.WhatsAppMessage, is Action.DialNumber, is Action.Navigate -> true
+    is Action.WhatsAppMessage, is Action.DialNumber, is Action.Navigate, is Action.ShareText -> true
+    is Action.IfElse -> nested.any { it.opensScreen() }
     else -> false
 }
 
 /** Si la acción necesita el teléfono desbloqueado: abre algo en pantalla o toca botones. */
-fun Action.needsUnlock(): Boolean = opensScreen() || this is Action.TapInApp
+fun Action.needsUnlock(): Boolean = opensScreen() || this is Action.TapInApp || nested.any { it.needsUnlock() }
 
 /** Si la acción necesita el permiso "Acceso a No molestar" (No molestar o modo silencio). */
 fun Action.needsDndAccess(): Boolean =
-    this is Action.DoNotDisturb || (this is Action.SetRingerMode && mode == RingerMode.SILENT)
+    this is Action.DoNotDisturb || (this is Action.SetRingerMode && mode == RingerMode.SILENT) || nested.any { it.needsDndAccess() }
+
+/** La acción y, si es un "si", todas las de adentro (para revisar permisos). */
+fun Action.flatten(): List<Action> = listOf(this) + nested.flatMap { it.flatten() }
 
 /** Qué volumen cambia [Action.SetVolume]. */
 @Serializable

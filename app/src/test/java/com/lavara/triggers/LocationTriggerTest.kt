@@ -41,4 +41,12 @@ class LocationTriggerTest {
         val leaving = home.copy(transition = LocationTransition.EXIT)
         assertTrue(TriggerMatcher.matches(leaving, "casa", TriggerEvent.LocationChanged("casa", entered = false, atMillis = 1)))
     }
+
+    @Test
+    fun quedarse_porDefectoCero_yConLimite() {
+        assertEquals(0, home.dwellMinutes)
+        assertEquals(10, Trigger.Location(10.0, -84.0, dwellMinutes = 10).dwellMinutes)
+        assertThrows(IllegalArgumentException::class.java) { Trigger.Location(10.0, -84.0, dwellMinutes = 241) }
+        assertThrows(IllegalArgumentException::class.java) { Trigger.Location(10.0, -84.0, dwellMinutes = -1) }
+    }
 }

@@ -182,13 +182,21 @@ class AutomationEngine(
                 break
             }
             val actionStart = nowMillis()
-            val outcome = perform(action, variables, chain, results)
+            var label = describe(action)
+            val outcome = if (action is Action.IfElse) {
+                // Se evalúa una sola vez: el historial dice qué camino tomó.
+                val passed = ifPasses(action)
+                label += if (passed) " → se cumple" else " → no se cumple"
+                runBranch(if (passed) action.then else action.otherwise, variables, chain, results, automation.onError)
+            } else {
+                perform(action, variables, chain, results, automation.onError)
+            }
             val failure = outcome as? ActionResult.Failure
-            records += ActionRecord(index, describe(action), nowMillis() - actionStart, failure == null, failure?.message)
+            records += ActionRecord(index, label, nowMillis() - actionStart, failure == null, failure?.message)
 
             if (failure != null) {
                 if (failedAction == null) {
-                    failedAction = describe(action)
+                    failedAction = label
                     errorMessage = failure.message
                 }
                 if (automation.onError == OnError.STOP) break
@@ -218,12 +226,14 @@ class AutomationEngine(
         variables: Variables,
         chain: List<String>,
         results: MutableList<ExecutionResult>,
+        onError: OnError,
     ): ActionResult = try {
         when (action) {
             is Action.Delay -> {
                 sleep(action.seconds * 1000)
                 ActionResult.Success
             }
+            is Action.IfElse -> runBranch(if (ifPasses(action)) action.then else action.otherwise, variables, chain, results, onError)
             is Action.RunAutomation -> runNested(action.automationId, chain, results)
             else -> executor.execute(variables.applyTo(action))
         }
@@ -231,6 +241,36 @@ class AutomationEngine(
         throw e
     } catch (e: Exception) {
         ActionResult.Failure(e.message ?: e::class.simpleName ?: "Error desconocido")
+    }
+
+    private fun ifPasses(action: Action.IfElse): Boolean = when {
+        action.conditions.isEmpty() -> true
+        action.matchAll -> action.conditions.all { evaluator.evaluate(it) }
+        else -> action.conditions.any { evaluator.evaluate(it) }
+    }
+
+    /** Hace las acciones de un camino del "si". Devuelve la primera falla, o Success. */
+    private suspend fun runBranch(
+        actions: List<Action>,
+        variables: Variables,
+        chain: List<String>,
+        results: MutableList<ExecutionResult>,
+        onError: OnError,
+    ): ActionResult {
+        var first: ActionResult.Failure? = null
+        for (inner in actions) {
+            // Las esperas largas siguen con una alarma solo en la lista principal; adentro de un "si" no.
+            val outcome = if (inner is Action.Delay && inner.seconds > INLINE_DELAY_SECONDS) {
+                ActionResult.Failure("Dentro de un \"si\" la espera máxima es de $INLINE_DELAY_SECONDS s")
+            } else {
+                perform(inner, variables, chain, results, onError)
+            }
+            if (outcome is ActionResult.Failure) {
+                if (first == null) first = ActionResult.Failure("${describe(inner)}: ${outcome.message}")
+                if (onError == OnError.STOP) break
+            }
+        }
+        return first ?: ActionResult.Success
     }
 
     private suspend fun runNested(
@@ -271,6 +311,11 @@ class AutomationEngine(
         const val INLINE_DELAY_SECONDS = 10L
 
         private fun describe(action: Action): String = when (action) {
+            is Action.Vibrate -> "Vibrar ${action.millis} ms"
+            is Action.CopyToClipboard -> "Copiar texto al portapapeles"
+            is Action.ShareText -> "Compartir texto"
+            is Action.MediaControl -> "Música: ${action.command.label}"
+            is Action.IfElse -> "Si (${action.conditions.size} condiciones): ${action.then.size} acciones; si no: ${action.otherwise.size}"
             is Action.ShowNotification -> "Mostrar notificación \"${action.title}\""
             is Action.OpenApp -> "Abrir app ${action.packageName}"
             is Action.OpenUrl -> "Abrir enlace ${action.host}"

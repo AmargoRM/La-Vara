@@ -36,8 +36,10 @@ class RunFromWidgetActivity : Activity() {
                 null -> "$name: no se ejecutó"
                 else -> "$name: ${result.reason}"
             }
-            // Con "Solo avisar si algo sale mal", si salió bien no aparece nada.
-            val quiet = result?.status == ExecutionStatus.EXECUTED && container.actionExecutor.notificationPrefs.onlyErrors
+            // Si salió bien no aparece nada, salvo que el usuario quiera ver sus notificaciones;
+            // si falló, solo con "Avisar cuando algo falla" encendido.
+            val prefs = container.actionExecutor.notificationPrefs
+            val quiet = if (result?.status == ExecutionStatus.EXECUTED) !prefs.showOwn else !prefs.notifyErrors
             runOnUiThread {
                 if (!quiet) Toast.makeText(applicationContext, message, Toast.LENGTH_SHORT).show()
                 finish()

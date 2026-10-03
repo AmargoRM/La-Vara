@@ -104,6 +104,11 @@ class AutomationWidget : AppWidgetProvider() {
             is Action.SendSms -> "✉️"
             is Action.DialNumber -> "📞"
             is Action.RunAutomation -> "▶️"
+            is Action.Vibrate -> "📳"
+            is Action.CopyToClipboard -> "📋"
+            is Action.ShareText -> "📤"
+            is Action.MediaControl -> "🎵"
+            is Action.IfElse -> "🔀"
             else -> "⚡"
         }
     }
