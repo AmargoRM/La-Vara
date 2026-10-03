@@ -152,6 +152,61 @@ sealed interface Action {
     data class OpenSystemPanel(
         val panel: SystemPanel = SystemPanel.WIFI,
     ) : Action
+
+    /**
+     * Abre WhatsApp en el chat de [phone] con [text] ya escrito. El usuario toca Enviar: WhatsApp no deja
+     * enviar sin tocar. [phone] lleva el código de país (506 para Costa Rica). [text] acepta variables.
+     * [contactName] es solo para mostrar ("Mamá"); en los registros va el nombre o los últimos dígitos.
+     */
+    @Serializable
+    @SerialName("whatsapp_message")
+    data class WhatsAppMessage(
+        val phone: String = "",
+        val text: String = "",
+        val contactName: String = "",
+    ) : Action
+
+    /** Abre el marcador del teléfono con [phone] escrito. El usuario toca Llamar. */
+    @Serializable
+    @SerialName("dial_number")
+    data class DialNumber(
+        val phone: String = "",
+        val contactName: String = "",
+    ) : Action
+
+    /** Abre [app] navegando hacia [destination]: una dirección, un lugar o coordenadas "9.93,-84.08". */
+    @Serializable
+    @SerialName("navigate")
+    data class Navigate(
+        val destination: String = "",
+        val app: NavigationApp = NavigationApp.WAZE,
+    ) : Action
+
+    /**
+     * Envía un SMS a [phone] sin tocar nada. Necesita el permiso de SMS. [text] acepta variables.
+     * El texto del mensaje nunca se escribe en los registros.
+     */
+    @Serializable
+    @SerialName("send_sms")
+    data class SendSms(
+        val phone: String = "",
+        val text: String = "",
+        val contactName: String = "",
+    ) : Action
+}
+
+/** App con la que navega [Action.Navigate]. */
+@Serializable
+enum class NavigationApp(val label: String) {
+    @SerialName("waze") WAZE("Waze"),
+    @SerialName("google_maps") GOOGLE_MAPS("Google Maps"),
+}
+
+/** Si la acción abre otra app o pantalla: con La Vara cerrada necesita "Mostrar sobre otras apps". */
+fun Action.opensScreen(): Boolean = when (this) {
+    is Action.OpenApp, is Action.OpenUrl, is Action.OpenSystemPanel,
+    is Action.WhatsAppMessage, is Action.DialNumber, is Action.Navigate -> true
+    else -> false
 }
 
 /** Si la acción necesita el permiso "Acceso a No molestar" (No molestar o modo silencio). */

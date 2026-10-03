@@ -4,6 +4,7 @@ import android.content.Context
 import android.text.format.DateFormat
 import com.lavara.actions.Action
 import com.lavara.actions.DndMode
+import com.lavara.actions.recipient
 import com.lavara.automation.Automation
 import com.lavara.conditions.Comparison
 import com.lavara.conditions.Condition
@@ -107,6 +108,10 @@ fun actionTitle(action: Action) = when (action) {
     is Action.DoNotDisturb -> if (action.mode == DndMode.OFF) "Apagar No molestar" else "No molestar (${action.mode.label})"
     is Action.SetBrightness -> if (action.auto) "Brillo automático" else "Brillo al ${action.percent} %"
     is Action.OpenSystemPanel -> "Abrir interruptor de ${action.panel.label}"
+    is Action.WhatsAppMessage -> "WhatsApp a ${action.recipient}"
+    is Action.DialNumber -> "Llamar a ${action.recipient}"
+    is Action.Navigate -> "Navegar con ${action.app.label}"
+    is Action.SendSms -> "SMS a ${action.recipient}"
 }
 
 /** Resumen de una línea: "Todos los días a las 8:00 a. m. · si la batería está sobre 20 % · mostrar notificación". */

@@ -1,6 +1,7 @@
 package com.lavara.automation
 
 import com.lavara.actions.Action
+import com.lavara.actions.Phone
 import com.lavara.conditions.Condition
 import com.lavara.triggers.Trigger
 
@@ -38,6 +39,19 @@ data class AutomationDraft(
                 is Action.OpenUrl -> if (action.host == "enlace" || !action.host.contains('.')) {
                     add("Falta el enlace de la acción ${i + 1}: pegalo en el campo \"Enlace\".")
                 }
+                is Action.WhatsAppMessage -> when {
+                    action.phone.none { it.isDigit() } -> add("La acción ${i + 1} necesita un número o un contacto.")
+                    !Phone.hasCountryCode(action.phone) ->
+                        add("El número de la acción ${i + 1} necesita el código de país adelante (506 para Costa Rica).")
+                }
+                is Action.SendSms -> when {
+                    action.phone.count { it.isDigit() } < 3 -> add("La acción ${i + 1} necesita un número o un contacto.")
+                    action.text.isBlank() -> add("La acción ${i + 1} necesita el texto del SMS.")
+                }
+                is Action.DialNumber -> if (action.phone.count { it.isDigit() } < 3) {
+                    add("La acción ${i + 1} necesita un número o un contacto.")
+                }
+                is Action.Navigate -> if (action.destination.isBlank()) add("La acción ${i + 1} necesita el destino.")
                 is Action.OpenApp, is Action.Flashlight, is Action.SetVolume, is Action.SetRingerMode,
                 is Action.DoNotDisturb, is Action.SetBrightness, is Action.OpenSystemPanel -> Unit
             }

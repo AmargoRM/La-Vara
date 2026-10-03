@@ -21,6 +21,10 @@ import com.lavara.R
 import com.lavara.actions.Action
 import com.lavara.actions.ActionExecutor
 import com.lavara.actions.ActionResult
+import com.lavara.actions.NavigationApp
+import com.lavara.actions.Phone
+import com.lavara.actions.link
+import com.lavara.actions.recipient
 import com.lavara.ui.MainActivity
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -28,6 +32,7 @@ import java.util.concurrent.atomic.AtomicInteger
 class AndroidActionExecutor(private val context: Context) : ActionExecutor {
 
     val systemControls = SystemControls(context)
+    val smsSender = SmsSender(context)
 
     override suspend fun execute(action: Action): ActionResult = when (action) {
         is Action.ShowNotification -> showNotification(action)
@@ -43,6 +48,14 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
             "el interruptor de ${action.panel.label}",
             requestCode = action.panel.ordinal + 7000,
         )
+        is Action.WhatsAppMessage -> whatsApp(action)
+        is Action.DialNumber -> start(
+            Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", Phone.dialable(action.phone), null)),
+            "el marcador con ${action.recipient}",
+            requestCode = action.phone.hashCode(),
+        )
+        is Action.Navigate -> navigate(action)
+        is Action.SendSms -> smsSender.send(action)
         // Delay y RunAutomation los resuelve el motor; no deberían llegar acá.
         is Action.Delay, is Action.RunAutomation -> ActionResult.Failure("El motor no pasó esta acción al ejecutor")
     }
@@ -120,6 +133,30 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         return start(view, "el enlace de ${action.host}", requestCode = action.url.hashCode())
     }
 
+    /** Abre el chat de WhatsApp con el texto escrito. Prefiere WhatsApp normal; si no está, WhatsApp Business. */
+    private fun whatsApp(action: Action.WhatsAppMessage): ActionResult {
+        val app = WHATSAPP_PACKAGES.firstOrNull { context.packageManager.getLaunchIntentForPackage(it) != null }
+            ?: return ActionResult.Failure("WhatsApp no está instalado.")
+        if (!Phone.hasCountryCode(action.phone)) {
+            return ActionResult.Failure("El número de ${action.recipient} no tiene código de país (506 para Costa Rica). Editá la automatización.")
+        }
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(action.link())).setPackage(app)
+        return start(intent, "el chat de WhatsApp con ${action.recipient}", requestCode = action.phone.hashCode())
+    }
+
+    /** Waze se abre con un enlace web (sin Waze, abre el navegador); Google Maps, con su propio enlace. */
+    private fun navigate(action: Action.Navigate): ActionResult {
+        if (action.destination.isBlank()) return ActionResult.Failure("Falta el destino. Editá la automatización.")
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(action.link()))
+        if (action.app == NavigationApp.GOOGLE_MAPS) {
+            if (context.packageManager.getLaunchIntentForPackage(GOOGLE_MAPS) == null) {
+                return ActionResult.Failure("Google Maps no está instalado.")
+            }
+            intent.setPackage(GOOGLE_MAPS)
+        }
+        return start(intent, "${action.app.label} con el destino", requestCode = action.destination.hashCode())
+    }
+
     /**
      * Abre [intent] si Android lo permite; si no, deja una notificación que lo abre al tocarla.
      * Con el teléfono bloqueado o la pantalla apagada, enciende la pantalla y abre apenas el usuario desbloquea.
@@ -159,6 +196,8 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
 
     private companion object {
         const val CHANNEL_ID = "automatizaciones"
+        const val GOOGLE_MAPS = "com.google.android.apps.maps"
+        val WHATSAPP_PACKAGES = listOf("com.whatsapp", "com.whatsapp.w4b")
 
         // Los ids de las notificaciones de actualizaciones son 1001 y 1002; estas empiezan en 2000.
         val nextId = AtomicInteger(2000)

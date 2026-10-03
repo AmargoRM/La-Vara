@@ -88,6 +88,10 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
 - [ ] **S14 Widget** de pantalla de inicio con automatizaciones favoritas.
 - [ ] **S15 Más acciones del sistema:** vibrar, sonido, volumen, multimedia, abrir URL, abrir ajuste, compartir texto, copiar al portapapeles, brillo (con permiso especial).
   - [x] Primera parte: linterna, volumen, modo de sonido, No molestar, brillo y abrir el interruptor de Wi-Fi, datos, Bluetooth, ubicación, NFC y modo avión.
+- [ ] **S15b Acciones dentro de otras apps** (pedido del usuario, 2026-10-03):
+  - [x] Abrir WhatsApp en el chat de un contacto con el mensaje escrito, llamar a un número (marcador) y navegar con Waze o Google Maps.
+  - [x] Enviar SMS sin tocar, con permiso bajo demanda.
+  - [ ] Tocar botones dentro de otras apps con Accesibilidad, limitado a una lista de apps elegidas por el usuario (espera su OK).
 - [ ] **S16 Archivos:** crear, escribir, añadir, leer, copiar, mover, eliminar, existe, dentro de carpetas que el usuario elija (Storage Access Framework).
 
 ## ETAPA 3 — Avanzado

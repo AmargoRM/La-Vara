@@ -69,6 +69,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lavara.actions.Action
 import com.lavara.actions.DndMode
+import com.lavara.actions.NavigationApp
 import com.lavara.actions.RingerMode
 import com.lavara.actions.SystemPanel
 import com.lavara.actions.VolumeStream
@@ -783,6 +784,44 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
+                        is Action.WhatsAppMessage -> {
+                            PhoneField(action.phone, action.contactName, international = true) { phone, name ->
+                                replace(action.copy(phone = phone, contactName = name))
+                            }
+                            MessageField(action.text) { replace(action.copy(text = it)) }
+                            Text(
+                                "WhatsApp se abre en ese chat con el mensaje escrito y vos tocás Enviar. Podés usar %battery, %time y %date.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        is Action.SendSms -> {
+                            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
+                                replace(action.copy(phone = phone, contactName = name))
+                            }
+                            MessageField(action.text) { replace(action.copy(text = it)) }
+                            Text(
+                                "El SMS sale solo, sin tocar nada, y cuesta como un SMS normal de tu plan. Podés usar %battery, %time y %date.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            SmsPermissionHint()
+                        }
+                        is Action.DialNumber -> {
+                            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
+                                replace(action.copy(phone = phone, contactName = name))
+                            }
+                            Text("Se abre el teléfono con el número marcado y vos tocás Llamar.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        is Action.Navigate -> {
+                            OptionPicker(NavigationApp.entries, action.app, { "Con " + it.label }) { replace(action.copy(app = it)) }
+                            OutlinedTextField(
+                                value = action.destination,
+                                onValueChange = { replace(action.copy(destination = it)) },
+                                label = { Text("Destino") },
+                                placeholder = { Text("Dirección, lugar o coordenadas") },
+                                supportingText = { Text("Ej.: Mall San Pedro, o 9.9325,-84.0796 copiado del mapa.") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                         is Action.RunAutomation -> {
                             var open by remember { mutableStateOf(false) }
                             val target = others.firstOrNull { it.id == action.automationId }
@@ -811,6 +850,10 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
             "Esperar unos segundos" to { onChange(draft.copy(actions = draft.actions + Action.Delay(5))) },
             "Abrir app" to { pickFor = NEW_ACTION },
             "Abrir enlace" to { onChange(draft.copy(actions = draft.actions + Action.OpenUrl("https://"))) },
+            "WhatsApp a un contacto" to { onChange(draft.copy(actions = draft.actions + Action.WhatsAppMessage())) },
+            "Enviar SMS (sale solo)" to { onChange(draft.copy(actions = draft.actions + Action.SendSms())) },
+            "Llamar a un número" to { onChange(draft.copy(actions = draft.actions + Action.DialNumber())) },
+            "Navegar a un lugar (Waze, Maps)" to { onChange(draft.copy(actions = draft.actions + Action.Navigate())) },
             "Ejecutar otra automatización" to { onChange(draft.copy(actions = draft.actions + Action.RunAutomation(""))) },
             "Linterna" to { onChange(draft.copy(actions = draft.actions + Action.Flashlight())) },
             "Volumen" to { onChange(draft.copy(actions = draft.actions + Action.SetVolume())) },

@@ -260,6 +260,46 @@ Lista vacía = no se cumple.
 - Android no deja a ninguna app encender ni apagar estas funciones sola (ver `docs/LIMITES_ANDROID.md`). La Vara abre el interruptor y el usuario lo toca.
 - Igual que `open_app`: con La Vara en segundo plano necesita "Mostrar sobre otras apps"; si no, muestra una notificación para abrirlo.
 
+### `whatsapp_message`: abrir WhatsApp en el chat de alguien con el mensaje escrito
+
+```json
+{ "type": "whatsapp_message", "phone": "+506 8888 7777", "text": "Voy en camino (%time)", "contactName": "Mamá" }
+```
+
+- `phone` (por defecto `""`): con código de país (`506` para Costa Rica). Acepta espacios, guiones y `+`.
+- `text` (por defecto `""`): el mensaje. Acepta variables (sección 7).
+- `contactName` (por defecto `""`): solo para mostrar. En los registros aparece este nombre o los últimos 4 dígitos, nunca el mensaje.
+- **No envía solo:** WhatsApp no deja que otra app envíe sin que el usuario toque Enviar. Para eso hace falta Accesibilidad (ver `docs/LIMITES_ANDROID.md`).
+- Usa WhatsApp; si no está, WhatsApp Business. Igual que `open_app`: con La Vara en segundo plano necesita "Mostrar sobre otras apps".
+
+### `send_sms`: enviar un SMS sin tocar nada
+
+```json
+{ "type": "send_sms", "phone": "8888 7777", "text": "Batería en %battery %", "contactName": "Mamá" }
+```
+
+- `phone` (por defecto `""`): como se marcaría en el teléfono (con o sin código de país).
+- `text` (por defecto `""`, obligatorio en el editor): acepta variables. Si es largo se divide en varios SMS.
+- `contactName` (por defecto `""`): solo para mostrar.
+- Necesita el permiso de SMS. Sale por la SIM elegida para SMS y cuesta como un SMS normal. Si el operador lo rechaza (sin señal, sin saldo), queda un error en los registros.
+
+### `dial_number`: abrir el teléfono con un número marcado
+
+```json
+{ "type": "dial_number", "phone": "8888 7777", "contactName": "Mamá" }
+```
+
+- `phone` y `contactName` como en `send_sms`. El usuario toca Llamar; La Vara no llama sola.
+
+### `navigate`: navegar hacia un lugar
+
+```json
+{ "type": "navigate", "destination": "Mall San Pedro", "app": "waze" }
+```
+
+- `destination` (por defecto `""`): dirección, nombre de un lugar o coordenadas `"9.9325,-84.0796"`.
+- `app` (por defecto `"waze"`): `"waze"` o `"google_maps"`. Sin Waze instalado, el enlace de Waze se abre en el navegador.
+
 ## 6. Política de error
 
 Qué pasa si una acción falla (por ejemplo, la app a abrir no está instalada):
