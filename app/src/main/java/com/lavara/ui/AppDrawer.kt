@@ -93,12 +93,23 @@ private fun EngineSummaryCard(container: AppContainer) {
 @Composable
 private fun NotificationsCard(container: AppContainer) {
     val prefs = container.actionExecutor.notificationPrefs
+    var onlyErrors by remember { mutableStateOf(prefs.onlyErrors) }
     var floating by remember { mutableStateOf(prefs.floating) }
     var tapToOpen by remember { mutableStateOf(prefs.tapToOpen) }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Notificaciones", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             SwitchRow(
+                "Solo avisar si algo sale mal",
+                if (onlyErrors) "Encendido: no aparece nada cuando todo sale bien, ni las de \"Mostrar notificación\". Si una automatización falla, queda un aviso discreto."
+                else "Apagado: se muestran las de \"Mostrar notificación\" y la confirmación del widget.",
+                onlyErrors,
+            ) {
+                onlyErrors = it
+                prefs.onlyErrors = it
+                container.logger.info("Notificaciones", "Solo avisar si algo sale mal: ${if (it) "encendido" else "apagado"}")
+            }
+            if (!onlyErrors) SwitchRow(
                 "Las de \"Mostrar notificación\" aparecen flotando arriba",
                 if (floating) "Encendido: salen arriba de la pantalla." else "Apagado: llegan discretas, sin flotar ni sonar.",
                 floating,

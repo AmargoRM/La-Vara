@@ -70,6 +70,8 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
             PackageManager.PERMISSION_GRANTED
 
     private fun showNotification(action: Action.ShowNotification): ActionResult {
+        // Con "Solo avisar si algo sale mal" la acción se da por hecha sin mostrar nada.
+        if (notificationPrefs.onlyErrors) return ActionResult.Success
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
         )
@@ -80,7 +82,7 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
     /** Muestra una notificación. Devuelve null si salió bien, o el motivo si no. */
     // El permiso se comprueba en canNotify(); lint no lo ve porque está en otra función.
     @SuppressLint("MissingPermission")
-    private fun notify(title: String, text: String, onTap: PendingIntent, channel: Channel): String? {
+    private fun notify(title: String, text: String, onTap: PendingIntent, channel: Channel, id: Int = nextId.incrementAndGet()): String? {
         if (!canNotify()) return "Falta el permiso de notificaciones. Abrí La Vara y permitilo."
         val manager = NotificationManagerCompat.from(context)
         if (!manager.areNotificationsEnabled()) return "Las notificaciones de La Vara están apagadas en los ajustes de Android."
@@ -94,11 +96,23 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
             .setAutoCancel(true)
             .build()
         return try {
-            manager.notify(nextId.incrementAndGet(), notification)
+            manager.notify(id, notification)
             null
         } catch (e: SecurityException) {
             "Android no dejó mostrar la notificación: ${e.message}"
         }
+    }
+
+    /**
+     * Aviso discreto (no flota ni suena) de que [name] falló. Uno por automatización: si vuelve a fallar,
+     * reemplaza al anterior en vez de acumularse. No se muestra si La Vara está a la vista.
+     */
+    fun notifyFailure(automationId: String, name: String, reason: String) {
+        if (isInForeground()) return
+        val open = PendingIntent.getActivity(
+            context, 1, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE,
+        )
+        notify("Falló: $name", reason, open, Channel.ERRORS, id = FAILURE_IDS + (automationId.hashCode() and 0xFFFF))
     }
 
     /**
@@ -225,6 +239,8 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
             "Notificaciones de tus automatizaciones que no flotan ni suenan."),
         TAP_TO_OPEN("tocar_para_abrir", "Tocá para abrir", NotificationManager.IMPORTANCE_LOW,
             "Aviso discreto cuando Android no dejó abrir algo solo."),
+        ERRORS("errores", "Errores", NotificationManager.IMPORTANCE_LOW,
+            "Aviso discreto cuando una automatización falla."),
     }
 
     private fun ensureChannel(channel: Channel) {
@@ -238,5 +254,8 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
 
         // Los ids de las notificaciones de actualizaciones son 1001 y 1002; estas empiezan en 2000.
         val nextId = AtomicInteger(2000)
+
+        // Avisos de error: un id fijo por automatización, lejos de los demás.
+        const val FAILURE_IDS = 100_000
     }
 }

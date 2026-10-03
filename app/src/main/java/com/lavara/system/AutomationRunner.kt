@@ -19,6 +19,8 @@ class AutomationRunner(
     private val logger: AppLogger,
     /** Recibe las automatizaciones que quedaron esperando el desbloqueo. */
     private val onWaitingUnlock: suspend (List<String>) -> Unit = {},
+    /** Recibe cada automatización que falló (id, nombre, motivo), para avisar al usuario. */
+    private val onFailed: (id: String, name: String, reason: String) -> Unit = { _, _, _ -> },
 ) {
     suspend fun handle(event: TriggerEvent): List<ExecutionResult> {
         logger.info(SOURCE, "Evento: ${describe(event)}")
@@ -61,6 +63,9 @@ class AutomationRunner(
             logger.log(level, SOURCE, "$name ${LogExporter.statusText(result.status.name)}: ${result.reason} (${result.durationMillis} ms)", result.automationId)
             for (action in result.executedActions.filter { !it.success }) {
                 logger.error(SOURCE, "$name: falló \"${action.action}\": ${action.errorMessage}", result.automationId)
+            }
+            if (result.status == ExecutionStatus.FAILED) {
+                onFailed(result.automationId, name, result.errorMessage?.let { "${result.failedAction}: $it" } ?: result.reason)
             }
         }
     }

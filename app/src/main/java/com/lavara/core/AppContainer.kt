@@ -52,7 +52,11 @@ class AppContainer(context: Context) {
         LaterAlarms(appContext, settingsRepository, automationRepository, logger, clock) { automationRunner }
     }
     val automationRunner: AutomationRunner by lazy {
-        AutomationRunner(engine, automationRepository, runRepository, logger) { ids -> unlockQueue.wait(ids) }
+        AutomationRunner(
+            engine, automationRepository, runRepository, logger,
+            onWaitingUnlock = { ids -> unlockQueue.wait(ids) },
+            onFailed = { id, name, reason -> actionExecutor.notifyFailure(id, name, reason) },
+        )
     }
     val unlockQueue: UnlockQueue by lazy {
         UnlockQueue(appContext, settingsRepository, automationRepository, logger, clock, appScope, { automationRunner }) {

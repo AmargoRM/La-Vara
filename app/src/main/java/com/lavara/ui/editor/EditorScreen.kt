@@ -733,6 +733,13 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                             OutlinedTextField(action.title, { replace(action.copy(title = it)) }, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                             OutlinedTextField(action.text, { replace(action.copy(text = it)) }, label = { Text("Texto") }, modifier = Modifier.fillMaxWidth())
                             Text("Podés usar %battery (batería), %time (hora) y %date (fecha).", style = MaterialTheme.typography.bodySmall)
+                            if ((context.applicationContext as LaVaraApp).container.actionExecutor.notificationPrefs.onlyErrors) {
+                                Text(
+                                    "Ojo: no se va a ver, porque está encendido \"Solo avisar si algo sale mal\" (menú ☰ → Notificaciones).",
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
                         is Action.Delay -> WaitFields(action) { replace(it) }
                         is Action.OpenApp -> {
