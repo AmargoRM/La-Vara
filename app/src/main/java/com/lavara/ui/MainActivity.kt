@@ -16,8 +16,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -29,10 +37,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lavara.BuildConfig
 import com.lavara.LaVaraApp
@@ -83,42 +89,66 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class) // TopAppBar
 @Composable
 fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: Int, resumeCount: Int) {
     var tab by rememberSaveable { mutableStateOf(Tab.INICIO) }
     // Editor abierto: null = cerrado; NEW = automatización nueva; si no, el id de la que se edita.
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
-    // Si la app se abrió desde la notificación de versión nueva, mostrar la tarjeta de actualizaciones.
-    LaunchedEffect(installRequest) { if (installRequest > 0) tab = Tab.INICIO }
 
     editing?.let { id ->
         EditorScreen(container, automationId = id.takeUnless { it == NEW }, onClose = { editing = null })
         return
     }
 
-    Scaffold(
-        floatingActionButton = {
-            if (tab == Tab.INICIO) {
-                ExtendedFloatingActionButton(onClick = { editing = NEW }) { Text("+  Nueva") }
-            }
-        },
-        bottomBar = {
-            NavigationBar {
-                Tab.entries.forEach { item ->
-                    NavigationBarItem(
-                        selected = tab == item,
-                        onClick = { tab = item },
-                        icon = { Icon(painterResource(item.icon), contentDescription = null) },
-                        label = { Text(item.label) },
-                    )
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
+    // Si la app se abrió desde la notificación de versión nueva, abrir el menú, donde está el botón de instalar.
+    LaunchedEffect(installRequest) { if (installRequest > 0) drawer.open() }
+
+    ModalNavigationDrawer(
+        drawerState = drawer,
+        drawerContent = { AppDrawer(versionLabel, container, installRequest) },
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(tab.label) },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { drawer.open() } }) {
+                            Icon(painterResource(R.drawable.ic_menu), contentDescription = "Menú")
+                        }
+                    },
+                )
+            },
+            floatingActionButton = {
+                if (tab == Tab.INICIO) {
+                    ExtendedFloatingActionButton(onClick = { editing = NEW }) { Text("+  Nueva") }
                 }
-            }
-        },
-    ) { padding ->
-        Box(Modifier.fillMaxSize().padding(padding)) {
-            when (tab) {
-                Tab.INICIO -> StartTab(versionLabel, container, installRequest, resumeCount, onEdit = { editing = it ?: NEW }, onShowHistory = { tab = Tab.HISTORIAL })
-                Tab.HISTORIAL -> HistoryScreen(container)
+            },
+            bottomBar = {
+                NavigationBar {
+                    Tab.entries.forEach { item ->
+                        NavigationBarItem(
+                            selected = tab == item,
+                            onClick = { tab = item },
+                            icon = { Icon(painterResource(item.icon), contentDescription = null) },
+                            label = { Text(item.label) },
+                        )
+                    }
+                }
+            },
+        ) { padding ->
+            Box(Modifier.fillMaxSize().padding(padding)) {
+                when (tab) {
+                    Tab.INICIO -> StartTab(
+                        container, resumeCount,
+                        onEdit = { editing = it ?: NEW },
+                        onShowHistory = { tab = Tab.HISTORIAL },
+                        onOpenMenu = { scope.launch { drawer.open() } },
+                    )
+                    Tab.HISTORIAL -> HistoryScreen(container)
+                }
             }
         }
     }
@@ -133,38 +163,30 @@ private enum class Tab(val label: String, @DrawableRes val icon: Int) {
 
 @Composable
 private fun StartTab(
-    versionLabel: String,
     container: AppContainer,
-    installRequest: Int,
     resumeCount: Int,
     onEdit: (String?) -> Unit,
     onShowHistory: () -> Unit,
+    onOpenMenu: () -> Unit,
 ) {
+    val manager = container.updateManager
+    var update by remember { mutableStateOf(manager.status()) }
+    // Al volver a La Vara, se revisa en silencio si pasó más de una hora: así el aviso aparece solo cuando hay versión nueva.
+    LaunchedEffect(resumeCount) {
+        update = manager.status()
+        if (manager.tokenStore.hasToken() && System.currentTimeMillis() - update.lastCheckMillis > 3_600_000L) {
+            update = manager.check(notify = false)
+        }
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(16.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Spacer(Modifier.height(48.dp))
-        Text(
-            text = "LA VARA",
-            style = MaterialTheme.typography.displayMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = versionLabel,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
-        Spacer(Modifier.height(32.dp))
+        NewVersionBanner(update, onOpen = onOpenMenu)
         AutomationsSection(container = container, resumeCount = resumeCount, onEdit = onEdit, onShowHistory = onShowHistory)
-        Spacer(Modifier.height(24.dp))
-        UpdateSection(container = container, installRequest = installRequest)
         // Espacio para que el botón "Nueva" no tape lo último de la lista.
         Spacer(Modifier.height(80.dp))
     }
