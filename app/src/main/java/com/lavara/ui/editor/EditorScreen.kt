@@ -75,6 +75,8 @@ import com.lavara.actions.SystemPanel
 import com.lavara.actions.VolumeStream
 import com.lavara.actions.needsDndAccess
 import com.lavara.system.device.SystemControls
+import com.lavara.system.accessibility.AllowedApps
+import com.lavara.LaVaraApp
 import com.lavara.automation.Automation
 import com.lavara.automation.AutomationDraft
 import com.lavara.automation.OnError
@@ -663,6 +665,10 @@ private fun AddMenu(label: String, options: List<Pair<String, () -> Unit>>) {
 private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (AutomationDraft) -> Unit) {
     // Para qué acción se está eligiendo app: su posición, o NEW_ACTION para agregar una nueva.
     var pickFor by remember { mutableStateOf<Int?>(null) }
+    // Para qué acción "Tocar un botón" se está eligiendo app, y la app que falta confirmar para la lista.
+    var tapPickFor by remember { mutableStateOf<Int?>(null) }
+    var confirmAllow by remember { mutableStateOf<Pair<Int, InstalledApp>?>(null) }
+    val context = LocalContext.current
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("¿Qué hace?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
@@ -707,7 +713,6 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                             )
                         }
                         is Action.OpenApp -> {
-                            val context = LocalContext.current
                             val label = remember(action.packageName) { InstalledApps(context).label(action.packageName) }
                             OutlinedButton(onClick = { pickFor = index }, modifier = Modifier.fillMaxWidth()) {
                                 AppIcon(action.packageName)
@@ -822,6 +827,7 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                                 modifier = Modifier.fillMaxWidth(),
                             )
                         }
+                        is Action.TapInApp -> TapFields(action, onPickApp = { tapPickFor = index }) { replace(it) }
                         is Action.RunAutomation -> {
                             var open by remember { mutableStateOf(false) }
                             val target = others.firstOrNull { it.id == action.automationId }
@@ -854,6 +860,10 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
             "Enviar SMS (sale solo)" to { onChange(draft.copy(actions = draft.actions + Action.SendSms())) },
             "Llamar a un número" to { onChange(draft.copy(actions = draft.actions + Action.DialNumber())) },
             "Navegar a un lugar (Waze, Maps)" to { onChange(draft.copy(actions = draft.actions + Action.Navigate())) },
+            "Tocar un botón en otra app" to {
+                onChange(draft.copy(actions = draft.actions + Action.TapInApp()))
+                tapPickFor = draft.actions.size
+            },
             "Ejecutar otra automatización" to { onChange(draft.copy(actions = draft.actions + Action.RunAutomation(""))) },
             "Linterna" to { onChange(draft.copy(actions = draft.actions + Action.Flashlight())) },
             "Volumen" to { onChange(draft.copy(actions = draft.actions + Action.SetVolume())) },
@@ -875,6 +885,36 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
     }
 
     CooldownRow(draft.cooldownSeconds) { onChange(draft.copy(cooldownSeconds = it)) }
+
+    fun setTapApp(target: Int, app: InstalledApp) {
+        val current = draft.actions.getOrNull(target) as? Action.TapInApp ?: return
+        onChange(draft.copy(actions = draft.actions.toMutableList().also { it[target] = current.copy(packageName = app.packageName) }))
+    }
+
+    tapPickFor?.let { target ->
+        AppPickerDialog(
+            title = "¿En qué app tocar?",
+            onDismiss = { tapPickFor = null },
+            onPick = { app ->
+                tapPickFor = null
+                if (app.packageName in AllowedApps(context).get()) setTapApp(target, app) else confirmAllow = target to app
+            },
+        )
+    }
+
+    confirmAllow?.let { (target, app) ->
+        AllowAppDialog(
+            appLabel = app.label,
+            onAllow = {
+                confirmAllow = null
+                AllowedApps(context).add(app.packageName)
+                (context.applicationContext as LaVaraApp).container.logger
+                    .info("Accesibilidad", "${app.label} agregada a las apps donde La Vara puede tocar botones.")
+                setTapApp(target, app)
+            },
+            onDismiss = { confirmAllow = null },
+        )
+    }
 
     pickFor?.let { target ->
         AppPickerDialog(
@@ -951,7 +991,7 @@ private fun AppIcon(packageName: String, size: Int = 32) {
 
 /** Lista de apps instaladas con buscador: el usuario elige por nombre, sin saber el nombre de paquete. */
 @Composable
-private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
+private fun AppPickerDialog(title: String = "¿Qué app abrir?", onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
     val context = LocalContext.current
     val apps by produceState<List<InstalledApp>?>(null) {
         value = withContext(Dispatchers.IO) { InstalledApps(context).launchable() }
@@ -959,7 +999,7 @@ private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (InstalledApp) -> Uni
     var search by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("¿Qué app abrir?") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(search, { search = it }, singleLine = true, label = { Text("Buscar") }, modifier = Modifier.fillMaxWidth())

@@ -112,6 +112,7 @@ fun actionTitle(action: Action) = when (action) {
     is Action.DialNumber -> "Llamar a ${action.recipient}"
     is Action.Navigate -> "Navegar con ${action.app.label}"
     is Action.SendSms -> "SMS a ${action.recipient}"
+    is Action.TapInApp -> "Tocar \"${action.button}\""
 }
 
 /** Resumen de una línea: "Todos los días a las 8:00 a. m. · si la batería está sobre 20 % · mostrar notificación". */

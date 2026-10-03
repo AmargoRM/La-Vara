@@ -300,7 +300,18 @@ Lista vacía = no se cumple.
 - `destination` (por defecto `""`): dirección, nombre de un lugar o coordenadas `"9.9325,-84.0796"`.
 - `app` (por defecto `"waze"`): `"waze"` o `"google_maps"`. Sin Waze instalado, el enlace de Waze se abre en el navegador.
 
-## 6. Política de error
+### `tap_in_app`: tocar un botón dentro de otra app
+
+```json
+{ "type": "tap_in_app", "packageName": "com.whatsapp", "button": "Enviar", "waitSeconds": 5 }
+```
+
+- `packageName` (por defecto `""`): la app donde toca. **Tiene que estar en la lista de apps permitidas** que el usuario elige en La Vara; si no, la acción falla. Importar un JSON no agrega apps a esa lista.
+- `button` (por defecto `""`): el texto del botón o su nombre para lectores de pantalla (en WhatsApp, la flecha de enviar es `"Enviar"`). También acepta el final de su nombre interno (`"send"`).
+- `waitSeconds` (por defecto 5, de 1 a 10): cuánto espera a que la app y el botón aparezcan.
+- Necesita el permiso de Accesibilidad encendido y el teléfono desbloqueado con la app a la vista. Va después de la acción que abre la app (por ejemplo, `whatsapp_message` y luego `tap_in_app`).
+- En los registros solo aparece el botón que se pidió, nunca lo que hay en la pantalla.
+
 
 Qué pasa si una acción falla (por ejemplo, la app a abrir no está instalada):
 

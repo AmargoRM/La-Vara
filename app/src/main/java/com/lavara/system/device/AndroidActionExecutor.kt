@@ -25,6 +25,8 @@ import com.lavara.actions.NavigationApp
 import com.lavara.actions.Phone
 import com.lavara.actions.link
 import com.lavara.actions.recipient
+import com.lavara.system.accessibility.AllowedApps
+import com.lavara.system.accessibility.TapService
 import com.lavara.ui.MainActivity
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -56,6 +58,7 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         )
         is Action.Navigate -> navigate(action)
         is Action.SendSms -> smsSender.send(action)
+        is Action.TapInApp -> tapInApp(action)
         // Delay y RunAutomation los resuelve el motor; no deberían llegar acá.
         is Action.Delay, is Action.RunAutomation -> ActionResult.Failure("El motor no pasó esta acción al ejecutor")
     }
@@ -142,6 +145,19 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         }
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(action.link())).setPackage(app)
         return start(intent, "el chat de WhatsApp con ${action.recipient}", requestCode = action.phone.hashCode())
+    }
+
+    /** Toca un botón en otra app con Accesibilidad, solo si el usuario la puso en la lista de permitidas. */
+    private suspend fun tapInApp(action: Action.TapInApp): ActionResult {
+        val name = InstalledApps(context).label(action.packageName) ?: action.packageName
+        if (action.packageName !in AllowedApps(context).get()) {
+            return ActionResult.Failure("$name no está en la lista de apps donde La Vara puede tocar botones. Agregala desde el editor.")
+        }
+        val service = TapService.current() ?: return ActionResult.Failure(
+            "El permiso de Accesibilidad de La Vara está apagado. Encendelo en Ajustes → Accesibilidad → La Vara: tocar botones.",
+        )
+        val problem = service.tap(action.packageName, action.button, action.waitSeconds.coerceIn(1, 10) * 1000L)
+        return if (problem == null) ActionResult.Success else ActionResult.Failure("No se pudo tocar en $name: $problem")
     }
 
     /** Waze se abre con un enlace web (sin Waze, abre el navegador); Google Maps, con su propio enlace. */

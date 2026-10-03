@@ -229,6 +229,7 @@ class AutomationEngine(
             is Action.DialNumber -> "Marcar a ${action.recipient}"
             is Action.Navigate -> "Navegar con ${action.app.label}"
             is Action.SendSms -> "Enviar SMS a ${action.recipient}"
+            is Action.TapInApp -> "Tocar \"${action.button}\" en ${action.packageName}"
         }
     }
 }

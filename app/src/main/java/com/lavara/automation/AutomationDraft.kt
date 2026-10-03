@@ -52,6 +52,12 @@ data class AutomationDraft(
                     add("La acción ${i + 1} necesita un número o un contacto.")
                 }
                 is Action.Navigate -> if (action.destination.isBlank()) add("La acción ${i + 1} necesita el destino.")
+                is Action.TapInApp -> when {
+                    action.packageName.isBlank() -> add("La acción ${i + 1} necesita elegir en qué app tocar.")
+                    action.button.isBlank() -> add("La acción ${i + 1} necesita el texto del botón (ej.: Enviar).")
+                    action.waitSeconds !in 1..MAX_DELAY_SECONDS.toInt() ->
+                        add("La acción ${i + 1} espera entre 1 y $MAX_DELAY_SECONDS segundos.")
+                }
                 is Action.OpenApp, is Action.Flashlight, is Action.SetVolume, is Action.SetRingerMode,
                 is Action.DoNotDisturb, is Action.SetBrightness, is Action.OpenSystemPanel -> Unit
             }

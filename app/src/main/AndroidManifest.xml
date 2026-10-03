@@ -119,6 +119,22 @@
             android:name=".system.location.GeofenceReceiver"
             android:exported="false" />
 
+        <!-- Accesibilidad: tocar botones solo dentro de las apps de la lista que el usuario elige en La Vara.
+             Solo Android puede conectarse (BIND_ACCESSIBILITY_SERVICE). Apagado hasta que el usuario lo
+             encienda en Ajustes → Accesibilidad. -->
+        <service
+            android:name=".system.accessibility.TapService"
+            android:exported="true"
+            android:label="@string/tap_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/tap_service" />
+        </service>
+
         <!-- Android avisa si cada SMS enviado por una automatización salió o no. -->
         <receiver
             android:name=".system.device.SmsSentReceiver"

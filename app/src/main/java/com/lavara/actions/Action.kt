@@ -193,6 +193,19 @@ sealed interface Action {
         val text: String = "",
         val contactName: String = "",
     ) : Action
+
+    /**
+     * Toca el botón [button] (su texto o su nombre, ej.: "Enviar") dentro de la app [packageName], usando
+     * el permiso de Accesibilidad. Solo funciona si esa app está en la lista de apps permitidas que el usuario
+     * eligió en La Vara. Espera hasta [waitSeconds] segundos a que la app y el botón aparezcan.
+     */
+    @Serializable
+    @SerialName("tap_in_app")
+    data class TapInApp(
+        val packageName: String = "",
+        val button: String = "",
+        val waitSeconds: Int = 5,
+    ) : Action
 }
 
 /** App con la que navega [Action.Navigate]. */
