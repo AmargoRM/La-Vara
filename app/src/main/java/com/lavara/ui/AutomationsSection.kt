@@ -38,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.lavara.actions.Action
 import com.lavara.actions.needsDndAccess
+import com.lavara.actions.opensScreen
+import com.lavara.system.accessibility.TapService
 import com.lavara.automation.Automation
 import com.lavara.automation.AutomationDraft
 import com.lavara.automation.ExecutionStatus
@@ -97,13 +99,17 @@ fun AutomationsSection(
                 battery = container.batteryOptimization.isExcluded(),
                 // Solo hace falta si alguna automatización activa abre apps.
                 openApps = automations.none { a ->
-                    a.enabled && a.actions.any { it is Action.OpenApp || it is Action.OpenUrl || it is Action.OpenSystemPanel }
+                    a.enabled && a.actions.any { it.opensScreen() }
                 } || container.actionExecutor.canOpenAppsInBackground(),
                 // No molestar y modo silencio necesitan "Acceso a No molestar"; el brillo, "Modificar ajustes del sistema".
                 dnd = automations.none { a -> a.enabled && a.actions.any { it.needsDndAccess() } } ||
                     container.actionExecutor.systemControls.hasDndAccess(),
                 brightness = automations.none { a -> a.enabled && a.actions.any { it is Action.SetBrightness } } ||
                     container.actionExecutor.systemControls.canWriteSettings(),
+                sms = automations.none { a -> a.enabled && a.actions.any { it is Action.SendSms } } ||
+                    container.actionExecutor.smsSender.hasPermission(),
+                accessibility = automations.none { a -> a.enabled && a.actions.any { it is Action.TapInApp } } ||
+                    TapService.isEnabled(context),
                 location = automations.none { it.enabled && it.trigger is Trigger.Location } ||
                     (container.locationAccess.hasBackground() && container.locationAccess.isLocationOn()),
                 locationOn = container.locationAccess.isLocationOn(),
@@ -156,6 +162,8 @@ fun AutomationsSection(
                 },
                 onDnd = { container.actionExecutor.systemControls.openDndAccessSettings() },
                 onBrightness = { container.actionExecutor.systemControls.openWriteSettings() },
+                onSms = { container.actionExecutor.smsSender.openAppSettings() },
+                onAccessibility = { TapService.openSettings(context) },
             )
         }
 
@@ -261,8 +269,10 @@ private data class Health(
     val locationOn: Boolean,
     val dnd: Boolean,
     val brightness: Boolean,
+    val sms: Boolean,
+    val accessibility: Boolean,
 ) {
-    val allOk get() = notifications && exactAlarms && battery && openApps && location && dnd && brightness
+    val allOk get() = notifications && exactAlarms && battery && openApps && location && dnd && brightness && sms && accessibility
 }
 
 @Composable
@@ -275,6 +285,8 @@ private fun HealthCard(
     onLocation: () -> Unit,
     onDnd: () -> Unit,
     onBrightness: () -> Unit,
+    onSms: () -> Unit,
+    onAccessibility: () -> Unit,
 ) {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -322,6 +334,20 @@ private fun HealthCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedButton(onClick = onBrightness) { Text("Permitir cambiar el brillo") }
+            }
+            if (!health.sms) {
+                Text(
+                    "Una automatización envía SMS y La Vara no tiene ese permiso. En Ajustes de La Vara: Permisos → SMS → Permitir. Si está gris o dice \"configuración restringida\": ⋮ (arriba a la derecha) → \"Permitir configuración restringida\" y volvé a intentarlo.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = onSms) { Text("Abrir ajustes de La Vara") }
+            }
+            if (!health.accessibility) {
+                Text(
+                    "Una automatización toca botones en otra app y el permiso de Accesibilidad está apagado. En Accesibilidad: Apps instaladas → \"La Vara: tocar botones\" → encender. Si dice \"configuración restringida\": Ajustes → Aplicaciones → La Vara → ⋮ → \"Permitir configuración restringida\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedButton(onClick = onAccessibility) { Text("Abrir Accesibilidad") }
             }
         }
     }

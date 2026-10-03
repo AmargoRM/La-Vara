@@ -69,11 +69,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lavara.actions.Action
 import com.lavara.actions.DndMode
+import com.lavara.actions.NavigationApp
 import com.lavara.actions.RingerMode
 import com.lavara.actions.SystemPanel
 import com.lavara.actions.VolumeStream
 import com.lavara.actions.needsDndAccess
 import com.lavara.system.device.SystemControls
+import com.lavara.system.accessibility.AllowedApps
+import com.lavara.LaVaraApp
 import com.lavara.automation.Automation
 import com.lavara.automation.AutomationDraft
 import com.lavara.automation.OnError
@@ -662,6 +665,10 @@ private fun AddMenu(label: String, options: List<Pair<String, () -> Unit>>) {
 private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (AutomationDraft) -> Unit) {
     // Para qué acción se está eligiendo app: su posición, o NEW_ACTION para agregar una nueva.
     var pickFor by remember { mutableStateOf<Int?>(null) }
+    // Para qué acción "Tocar un botón" se está eligiendo app, y la app que falta confirmar para la lista.
+    var tapPickFor by remember { mutableStateOf<Int?>(null) }
+    var confirmAllow by remember { mutableStateOf<Pair<Int, InstalledApp>?>(null) }
+    val context = LocalContext.current
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("¿Qué hace?", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold)
@@ -706,7 +713,6 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                             )
                         }
                         is Action.OpenApp -> {
-                            val context = LocalContext.current
                             val label = remember(action.packageName) { InstalledApps(context).label(action.packageName) }
                             OutlinedButton(onClick = { pickFor = index }, modifier = Modifier.fillMaxWidth()) {
                                 AppIcon(action.packageName)
@@ -783,6 +789,45 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
+                        is Action.WhatsAppMessage -> {
+                            PhoneField(action.phone, action.contactName, international = true) { phone, name ->
+                                replace(action.copy(phone = phone, contactName = name))
+                            }
+                            MessageField(action.text) { replace(action.copy(text = it)) }
+                            Text(
+                                "WhatsApp se abre en ese chat con el mensaje escrito y vos tocás Enviar. Podés usar %battery, %time y %date.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        is Action.SendSms -> {
+                            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
+                                replace(action.copy(phone = phone, contactName = name))
+                            }
+                            MessageField(action.text) { replace(action.copy(text = it)) }
+                            Text(
+                                "El SMS sale solo, sin tocar nada, y cuesta como un SMS normal de tu plan. Podés usar %battery, %time y %date.",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            SmsPermissionHint()
+                        }
+                        is Action.DialNumber -> {
+                            PhoneField(action.phone, action.contactName, international = false) { phone, name ->
+                                replace(action.copy(phone = phone, contactName = name))
+                            }
+                            Text("Se abre el teléfono con el número marcado y vos tocás Llamar.", style = MaterialTheme.typography.bodySmall)
+                        }
+                        is Action.Navigate -> {
+                            OptionPicker(NavigationApp.entries, action.app, { "Con " + it.label }) { replace(action.copy(app = it)) }
+                            OutlinedTextField(
+                                value = action.destination,
+                                onValueChange = { replace(action.copy(destination = it)) },
+                                label = { Text("Destino") },
+                                placeholder = { Text("Dirección, lugar o coordenadas") },
+                                supportingText = { Text("Ej.: Mall San Pedro, o 9.9325,-84.0796 copiado del mapa.") },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        is Action.TapInApp -> TapFields(action, onPickApp = { tapPickFor = index }) { replace(it) }
                         is Action.RunAutomation -> {
                             var open by remember { mutableStateOf(false) }
                             val target = others.firstOrNull { it.id == action.automationId }
@@ -811,6 +856,14 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
             "Esperar unos segundos" to { onChange(draft.copy(actions = draft.actions + Action.Delay(5))) },
             "Abrir app" to { pickFor = NEW_ACTION },
             "Abrir enlace" to { onChange(draft.copy(actions = draft.actions + Action.OpenUrl("https://"))) },
+            "WhatsApp a un contacto" to { onChange(draft.copy(actions = draft.actions + Action.WhatsAppMessage())) },
+            "Enviar SMS (sale solo)" to { onChange(draft.copy(actions = draft.actions + Action.SendSms())) },
+            "Llamar a un número" to { onChange(draft.copy(actions = draft.actions + Action.DialNumber())) },
+            "Navegar a un lugar (Waze, Maps)" to { onChange(draft.copy(actions = draft.actions + Action.Navigate())) },
+            "Tocar un botón en otra app" to {
+                onChange(draft.copy(actions = draft.actions + Action.TapInApp()))
+                tapPickFor = draft.actions.size
+            },
             "Ejecutar otra automatización" to { onChange(draft.copy(actions = draft.actions + Action.RunAutomation(""))) },
             "Linterna" to { onChange(draft.copy(actions = draft.actions + Action.Flashlight())) },
             "Volumen" to { onChange(draft.copy(actions = draft.actions + Action.SetVolume())) },
@@ -832,6 +885,36 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
     }
 
     CooldownRow(draft.cooldownSeconds) { onChange(draft.copy(cooldownSeconds = it)) }
+
+    fun setTapApp(target: Int, app: InstalledApp) {
+        val current = draft.actions.getOrNull(target) as? Action.TapInApp ?: return
+        onChange(draft.copy(actions = draft.actions.toMutableList().also { it[target] = current.copy(packageName = app.packageName) }))
+    }
+
+    tapPickFor?.let { target ->
+        AppPickerDialog(
+            title = "¿En qué app tocar?",
+            onDismiss = { tapPickFor = null },
+            onPick = { app ->
+                tapPickFor = null
+                if (app.packageName in AllowedApps(context).get()) setTapApp(target, app) else confirmAllow = target to app
+            },
+        )
+    }
+
+    confirmAllow?.let { (target, app) ->
+        AllowAppDialog(
+            appLabel = app.label,
+            onAllow = {
+                confirmAllow = null
+                AllowedApps(context).add(app.packageName)
+                (context.applicationContext as LaVaraApp).container.logger
+                    .info("Accesibilidad", "${app.label} agregada a las apps donde La Vara puede tocar botones.")
+                setTapApp(target, app)
+            },
+            onDismiss = { confirmAllow = null },
+        )
+    }
 
     pickFor?.let { target ->
         AppPickerDialog(
@@ -908,7 +991,7 @@ private fun AppIcon(packageName: String, size: Int = 32) {
 
 /** Lista de apps instaladas con buscador: el usuario elige por nombre, sin saber el nombre de paquete. */
 @Composable
-private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
+private fun AppPickerDialog(title: String = "¿Qué app abrir?", onDismiss: () -> Unit, onPick: (InstalledApp) -> Unit) {
     val context = LocalContext.current
     val apps by produceState<List<InstalledApp>?>(null) {
         value = withContext(Dispatchers.IO) { InstalledApps(context).launchable() }
@@ -916,7 +999,7 @@ private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (InstalledApp) -> Uni
     var search by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("¿Qué app abrir?") },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(search, { search = it }, singleLine = true, label = { Text("Buscar") }, modifier = Modifier.fillMaxWidth())

@@ -10,7 +10,16 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import com.lavara.system.accessibility.AllowedApps
+import com.lavara.system.accessibility.TapService
+import com.lavara.system.device.InstalledApps
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +49,7 @@ fun AppDrawer(versionLabel: String, container: AppContainer, installRequest: Int
             Text(versionLabel, style = MaterialTheme.typography.bodyMedium)
             EngineSummaryCard(container)
             UpdateSection(container = container, installRequest = installRequest)
+            AllowedAppsCard(container)
             HowItWorksCard()
         }
     }
@@ -71,6 +81,45 @@ private fun EngineSummaryCard(container: AppContainer) {
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text("Si falta algún permiso, el aviso aparece en Inicio.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+/**
+ * Apps donde La Vara puede tocar botones con Accesibilidad. Se agregan desde el editor; aquí se ven y se
+ * quitan. Sin apps, el permiso no sirve para nada aunque esté encendido.
+ */
+@Composable
+private fun AllowedAppsCard(container: AppContainer) {
+    val context = LocalContext.current
+    val allowed = remember { AllowedApps(context) }
+    var apps by remember { mutableStateOf(allowed.get()) }
+    val enabled = TapService.isEnabled(context)
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Tocar botones en otras apps", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "Permiso de Accesibilidad: " + if (enabled) "encendido." else "apagado.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (apps.isEmpty()) {
+                Text("Ninguna app permitida. Se agregan al crear la acción \"Tocar un botón en otra app\".", style = MaterialTheme.typography.bodySmall)
+            }
+            val installed = remember { InstalledApps(context) }
+            apps.sorted().forEach { pkg ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(installed.label(pkg) ?: pkg, modifier = Modifier.weight(1f))
+                    TextButton(onClick = {
+                        allowed.remove(pkg)
+                        apps = allowed.get()
+                        container.logger.info("Accesibilidad", "${installed.label(pkg) ?: pkg} quitada de las apps donde La Vara puede tocar botones.")
+                    }) { Text("Quitar") }
+                }
+            }
+            if (enabled) {
+                Text("Para apagarlo del todo: Accesibilidad → La Vara: tocar botones → apagar.", style = MaterialTheme.typography.bodySmall)
+            }
+            OutlinedButton(onClick = { TapService.openSettings(context) }) { Text("Abrir Accesibilidad") }
         }
     }
 }

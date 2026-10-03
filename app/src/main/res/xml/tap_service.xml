@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- packageNames arranca solo con La Vara; TapService lo cambia por la lista de apps permitidas. -->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagDefault"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/tap_service_description"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="500"
+    android:packageNames="com.lavara" />

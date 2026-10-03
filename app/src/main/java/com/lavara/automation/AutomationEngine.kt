@@ -3,6 +3,7 @@ package com.lavara.automation
 import com.lavara.actions.Action
 import com.lavara.actions.ActionExecutor
 import com.lavara.actions.ActionResult
+import com.lavara.actions.recipient
 import com.lavara.conditions.ConditionEvaluator
 import com.lavara.core.Clock
 import com.lavara.core.DeviceState
@@ -224,6 +225,11 @@ class AutomationEngine(
             is Action.DoNotDisturb -> "No molestar: ${action.mode.label}"
             is Action.SetBrightness -> if (action.auto) "Brillo automático" else "Brillo al ${action.percent} %"
             is Action.OpenSystemPanel -> "Abrir interruptor de ${action.panel.label}"
+            is Action.WhatsAppMessage -> "Abrir WhatsApp con ${action.recipient}"
+            is Action.DialNumber -> "Marcar a ${action.recipient}"
+            is Action.Navigate -> "Navegar con ${action.app.label}"
+            is Action.SendSms -> "Enviar SMS a ${action.recipient}"
+            is Action.TapInApp -> "Tocar \"${action.button}\" en ${action.packageName}"
         }
     }
 }

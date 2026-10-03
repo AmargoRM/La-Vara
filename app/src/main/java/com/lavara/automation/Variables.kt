@@ -13,6 +13,8 @@ data class Variables(val values: Map<String, String>) {
     /** Devuelve la acción con sus textos ya reemplazados. Las acciones sin texto quedan igual. */
     fun applyTo(action: Action): Action = when (action) {
         is Action.ShowNotification -> action.copy(title = expand(action.title), text = expand(action.text))
+        is Action.WhatsAppMessage -> action.copy(text = expand(action.text))
+        is Action.SendSms -> action.copy(text = expand(action.text))
         else -> action
     }
 
