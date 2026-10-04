@@ -550,7 +550,7 @@ private fun WhenStep(context: Context, container: AppContainer, draft: Automatio
         }
         Text(
             "$detail\nMientras esté activa vas a ver la notificación fija \"La Vara está activa\": Android exige ese aviso " +
-                "para que una app cerrada pueda escuchar la batería, el cargador y el Wi-Fi.",
+                "para que una app cerrada pueda escuchar la batería, el cargador y el Wi-Fi. Si no la querés ver, apagala en ☰ → Notificaciones: sigue funcionando igual.",
             style = MaterialTheme.typography.bodyMedium,
         )
     }

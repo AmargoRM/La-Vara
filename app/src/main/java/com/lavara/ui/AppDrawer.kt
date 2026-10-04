@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import com.lavara.system.accessibility.AllowedApps
 import com.lavara.system.accessibility.TapService
+import com.lavara.system.device.FixedNotices
 import com.lavara.system.device.InstalledApps
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -95,6 +96,7 @@ private fun EngineSummaryCard(container: AppContainer) {
  */
 @Composable
 private fun NotificationsCard(container: AppContainer) {
+    val context = LocalContext.current
     val prefs = container.actionExecutor.notificationPrefs
     var showOwn by remember { mutableStateOf(prefs.showOwn) }
     var notifyErrors by remember { mutableStateOf(prefs.notifyErrors) }
@@ -120,11 +122,25 @@ private fun NotificationsCard(container: AppContainer) {
                 if (tapToOpen) "Encendido: si algo no se pudo abrir solo, queda un aviso para abrirlo." else "Apagado: si algo no se pudo abrir solo, queda en Historial.",
                 tapToOpen,
             ) { tapToOpen = it; prefs.tapToOpen = it; log("Avisar \"Tocá para abrir\"", it) }
+            Text("Aviso fijo \"La Vara está activa\"", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Aparte, Android exige un aviso fijo mientras La Vara escucha la batería o el Wi-Fi, o espera que desbloquees. Ya está al mínimo, " +
-                    "sin ícono arriba; si querés esconderlo, mantenelo presionado y apagalo desde Android. El aviso de versión nueva se maneja en Actualizaciones.",
+                "Android lo exige mientras La Vara escucha la batería, el cargador o el Wi-Fi, y La Vara no puede quitarlo sola. " +
+                    "Sí podés apagarlo vos en Android: las automatizaciones siguen funcionando igual, solo deja de verse.",
                 style = MaterialTheme.typography.bodySmall,
             )
+            OutlinedButton(onClick = {
+                context.startActivity(FixedNotices.channelSettings(context, FixedNotices.WATCH_CHANNEL))
+                container.logger.info("Notificaciones", "Abiertos los ajustes de Android del aviso \"La Vara está activa\"")
+            }) { Text("Apagar el aviso fijo") }
+            Text(
+                "Para no ver ninguna notificación de La Vara (también \"espera el desbloqueo\" y la de versión nueva), apagá todo desde acá. " +
+                    "Nada deja de funcionar; lo que pase queda en Historial.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = {
+                context.startActivity(FixedNotices.appSettings(context))
+                container.logger.info("Notificaciones", "Abiertos los ajustes de Android de todas las notificaciones")
+            }) { Text("Apagar todas las notificaciones") }
         }
     }
 }
@@ -191,7 +207,7 @@ private fun HowItWorksCard() {
             )
             Text(
                 "Funciona con La Vara cerrada. Algunos disparadores necesitan la notificación fija \"La Vara está activa\": " +
-                    "Android la exige para escuchar la batería, el cargador y el Wi-Fi.",
+                    "Android la exige para escuchar la batería, el cargador y el Wi-Fi. Podés apagarla en Notificaciones sin que deje de funcionar.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Text(
