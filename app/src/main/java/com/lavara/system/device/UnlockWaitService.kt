@@ -1,7 +1,5 @@
 package com.lavara.system.device
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -71,11 +69,7 @@ class UnlockWaitService : Service() {
     }
 
     private fun startInForeground() {
-        val manager = getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(CHANNEL_ID, "Esperando el desbloqueo", NotificationManager.IMPORTANCE_MIN).apply {
-            description = "Aviso silencioso mientras una automatización espera a que desbloquees el teléfono."
-        }
-        manager.createNotificationChannel(channel)
+        FixedNotices.ensureChannels(this)
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notificacion)
@@ -93,7 +87,7 @@ class UnlockWaitService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "espera_desbloqueo"
+        private const val CHANNEL_ID = FixedNotices.UNLOCK_CHANNEL
         private const val NOTIFICATION_ID = 1600
 
         /** Enciende la espera. Devuelve false si Android no lo permite (La Vara en segundo plano, Android 12+). */
