@@ -785,6 +785,8 @@ private fun DoStep(draft: AutomationDraft, others: List<Automation>, onChange: (
             "Copiar texto al portapapeles" to { onChange(draft.copy(actions = draft.actions + Action.CopyToClipboard())) },
             "Compartir texto" to { onChange(draft.copy(actions = draft.actions + Action.ShareText())) },
             "Música (pausar, siguiente…)" to { onChange(draft.copy(actions = draft.actions + Action.MediaControl())) },
+            "Responder una notificación (WhatsApp…)" to { onChange(draft.copy(actions = draft.actions + Action.ReplyToNotification())) },
+            "Tocar un botón de una notificación" to { onChange(draft.copy(actions = draft.actions + Action.TapNotificationButton())) },
             "Si… / si no… (según una condición)" to { onChange(draft.copy(actions = draft.actions + Action.IfElse())) },
         ),
     )
@@ -989,6 +991,8 @@ private fun ActionFields(
             )
         }
         is Action.TapInApp -> TapFields(action, onPickApp = { onPickTapApp() }) { replace(it) }
+        is Action.ReplyToNotification -> ReplyNotificationFields(action) { replace(it) }
+        is Action.TapNotificationButton -> TapNotificationFields(action) { replace(it) }
         is Action.RunAutomation -> {
             var open by remember { mutableStateOf(false) }
             val target = others.firstOrNull { it.id == action.automationId }
@@ -1199,6 +1203,8 @@ private fun BranchActions(title: String, actions: List<Action>, others: List<Aut
             "Copiar texto al portapapeles" to { add(Action.CopyToClipboard()) },
             "Compartir texto" to { add(Action.ShareText()) },
             "Música (pausar, siguiente…)" to { add(Action.MediaControl()) },
+            "Responder una notificación (WhatsApp…)" to { add(Action.ReplyToNotification()) },
+            "Tocar un botón de una notificación" to { add(Action.TapNotificationButton()) },
         ),
     )
     pickFor?.let { target ->

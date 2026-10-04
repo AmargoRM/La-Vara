@@ -95,6 +95,7 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
   - [x] Tocar botones dentro de otras apps con Accesibilidad, limitado a una lista de apps elegidas por el usuario (OK del usuario el 2026-10-03).
   - [x] Con el teléfono bloqueado, lo que no necesita pantalla (volumen, música…) corre ya y solo lo que abre apps o toca botones espera el desbloqueo (pedido del usuario, 2026-10-03).
   - [x] "Ver los botones": elegir el botón de una lista leída de la pantalla de la app, en vez de adivinar su nombre (pedido del usuario, 2026-10-03).
+  - [x] "Responder una notificación" y "Tocar un botón de una notificación", con el teléfono bloqueado (OK del usuario, 2026-10-04).
   - [x] Acción "Música" con app elegida: despierta esa app de música aunque esté cerrada y el teléfono bloqueado (pedido del usuario, 2026-10-04).
 - [ ] **S16 Archivos:** crear, escribir, añadir, leer, copiar, mover, eliminar, existe, dentro de carpetas que el usuario elija (Storage Access Framework).
 

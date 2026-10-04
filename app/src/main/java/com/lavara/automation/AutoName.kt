@@ -50,6 +50,8 @@ object AutoName {
         is Action.Vibrate -> "Vibrar"
         is Action.CopyToClipboard -> "Copiar texto"
         is Action.ShareText -> "Compartir texto"
+        is Action.ReplyToNotification -> "Responder" + action.from.let { if (it.isBlank()) "" else " a $it" }
+        is Action.TapNotificationButton -> "Tocar ${action.button}"
         is Action.MediaControl -> "Música: ${action.command.label}"
         is Action.IfElse -> "Si…"
     }

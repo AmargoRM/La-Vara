@@ -27,6 +27,7 @@ import com.lavara.actions.link
 import com.lavara.actions.recipient
 import com.lavara.system.accessibility.AllowedApps
 import com.lavara.system.accessibility.TapService
+import com.lavara.system.notifications.NotificationActions
 import com.lavara.ui.MainActivity
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -61,6 +62,8 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         is Action.Navigate -> navigate(action)
         is Action.SendSms -> smsSender.send(action)
         is Action.TapInApp -> tapInApp(action)
+        is Action.ReplyToNotification -> NotificationActions(context).reply(action)
+        is Action.TapNotificationButton -> NotificationActions(context).tap(action)
         is Action.Vibrate -> extra.vibrate(action)
         is Action.CopyToClipboard -> extra.copy(action)
         is Action.MediaControl -> extra.media(action)

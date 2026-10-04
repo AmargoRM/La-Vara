@@ -124,6 +124,8 @@ fun actionTitle(action: Action) = when (action) {
     is Action.Vibrate -> "Vibrar"
     is Action.CopyToClipboard -> "Copiar al portapapeles"
     is Action.ShareText -> "Compartir texto"
+    is Action.ReplyToNotification -> "Responder una notificación"
+    is Action.TapNotificationButton -> "Tocar \"${action.button}\" en una notificación"
     is Action.MediaControl -> "Música: ${action.command.label}"
     is Action.IfElse -> "Si… si no…"
 }

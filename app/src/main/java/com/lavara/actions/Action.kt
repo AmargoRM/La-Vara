@@ -234,6 +234,31 @@ sealed interface Action {
     ) : Action
 
     /**
+     * Responde [text] con el botón "Responder" de la notificación más nueva de [packageName] (WhatsApp,
+     * Telegram, SMS…). Si [from] no está vacío, solo la notificación cuyo título lo contenga (ej.: el contacto).
+     * No abre la app: funciona con el teléfono bloqueado. Necesita "Acceso a notificaciones".
+     */
+    @Serializable
+    @SerialName("reply_notification")
+    data class ReplyToNotification(
+        val packageName: String = "",
+        val text: String = "",
+        val from: String = "",
+    ) : Action
+
+    /**
+     * Toca el botón [button] (ej.: "Marcar como leído", "Pausa") de la notificación más nueva de [packageName].
+     * [from] filtra por título como en [ReplyToNotification]. Funciona con el teléfono bloqueado.
+     */
+    @Serializable
+    @SerialName("tap_notification_button")
+    data class TapNotificationButton(
+        val packageName: String = "",
+        val button: String = "",
+        val from: String = "",
+    ) : Action
+
+    /**
      * Controla la música o el video. Sin [packageName], como los botones de los audífonos: lo recibe la app que
      * esté sonando o la última que sonó. Con [packageName], le habla directo a esa app de música, aunque esté
      * cerrada (vacío = como antes).
@@ -290,6 +315,10 @@ fun Action.opensScreen(): Boolean = when (this) {
 
 /** Si la acción necesita el teléfono desbloqueado: abre algo en pantalla o toca botones. */
 fun Action.needsUnlock(): Boolean = opensScreen() || this is Action.TapInApp || nested.any { it.needsUnlock() }
+
+/** Si la acción usa las notificaciones de otras apps: necesita "Acceso a notificaciones". */
+fun Action.needsNotificationAccess(): Boolean =
+    this is Action.ReplyToNotification || this is Action.TapNotificationButton || nested.any { it.needsNotificationAccess() }
 
 /** Si la acción necesita el permiso "Acceso a No molestar" (No molestar o modo silencio). */
 fun Action.needsDndAccess(): Boolean =

@@ -66,6 +66,14 @@ data class AutomationDraft(
             }
             is Action.CopyToClipboard -> if (action.text.isBlank()) add("$label necesita el texto a copiar.")
             is Action.ShareText -> if (action.text.isBlank()) add("$label necesita el texto a compartir.")
+            is Action.ReplyToNotification -> when {
+                action.packageName.isBlank() -> add("$label necesita elegir de qué app es la notificación.")
+                action.text.isBlank() -> add("$label necesita el texto de la respuesta.")
+            }
+            is Action.TapNotificationButton -> when {
+                action.packageName.isBlank() -> add("$label necesita elegir de qué app es la notificación.")
+                action.button.isBlank() -> add("$label necesita el nombre del botón (ej.: Marcar como leído).")
+            }
             is Action.IfElse -> {
                 if (action.then.isEmpty() && action.otherwise.isEmpty()) add("$label (\"si\") no tiene acciones adentro.")
                 action.then.forEachIndexed { j, inner -> addAll(problemsOf(inner, "$label (si se cumple, ${j + 1})", insideIf = true)) }
