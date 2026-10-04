@@ -1016,8 +1016,8 @@ private fun ActionFields(
             Text("Se abre el menú Compartir y vos elegís la app. Podés usar %battery, %time y %date.", style = MaterialTheme.typography.bodySmall)
         }
         is Action.MediaControl -> {
-            OptionPicker(MediaCommand.entries, action.command, { it.label.replaceFirstChar { c -> c.uppercase() } }) { replace(Action.MediaControl(it)) }
-            Text("Funciona con la app de música o video que esté sonando, como los botones de los audífonos.", style = MaterialTheme.typography.bodySmall)
+            OptionPicker(MediaCommand.entries, action.command, { it.label.replaceFirstChar { c -> c.uppercase() } }) { replace(action.copy(command = it)) }
+            MusicAppField(action) { replace(it) }
         }
         is Action.IfElse -> IfElseFields(action, others) { replace(it) }
     }

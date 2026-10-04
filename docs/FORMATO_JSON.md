@@ -389,10 +389,11 @@ Lista vacía = no se cumple.
 ### `media_control`: controlar la música
 
 ```json
-{ "type": "media_control", "command": "play_pause" }
+{ "type": "media_control", "command": "play", "packageName": "com.spotify.music" }
 ```
 
-- `command` (por defecto `"play_pause"`): `"play_pause"`, `"play"`, `"pause"`, `"next"` o `"previous"`. Funciona con la app que esté sonando, como los botones de los audífonos.
+- `command` (por defecto `"play_pause"`): `"play_pause"`, `"play"`, `"pause"`, `"next"` o `"previous"`.
+- `packageName` (por defecto `""`): vacío = como los botones de los audífonos (la app que esté sonando o la última que sonó). Con una app = La Vara le habla directo a esa app, aunque esté cerrada: primero por su servicio de música (`MediaBrowserService`), si no, con la tecla de música enviada solo a ella. Con `"play"` comprueba durante 3 s que algo suene; si no, la acción falla.
 
 ### `if`: si… / si no…
 

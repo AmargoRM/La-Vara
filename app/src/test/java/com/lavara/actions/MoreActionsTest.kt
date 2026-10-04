@@ -35,6 +35,22 @@ class MoreActionsTest {
     }
 
     @Test
+    fun musica_conAppElegida_idaYVuelta() {
+        val automation = Automation(
+            id = "a", name = "A", trigger = Trigger.Manual,
+            actions = listOf(Action.MediaControl(MediaCommand.PLAY, "com.spotify.music")),
+        )
+        val text = AutomationJson.encode(automation)
+        assertEquals(automation, AutomationJson.decode(text))
+        assertTrue(text, text.contains("\"packageName\""))
+        // Las guardadas antes no tienen app: siguen funcionando como los botones de los audífonos.
+        val vieja = AutomationJson.decode(
+            """{"id":"a","name":"A","trigger":{"type":"manual"},"actions":[{"type":"media_control","command":"play"}]}""",
+        )
+        assertEquals(listOf(Action.MediaControl(MediaCommand.PLAY, "")), vieja.actions)
+    }
+
+    @Test
     fun vibracionFueraDeRango_seRechaza() {
         assertThrows(IllegalArgumentException::class.java) { Action.Vibrate(0) }
         assertThrows(IllegalArgumentException::class.java) { Action.Vibrate(20_000) }

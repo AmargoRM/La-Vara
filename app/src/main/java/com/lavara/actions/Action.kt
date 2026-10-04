@@ -233,11 +233,16 @@ sealed interface Action {
         val text: String = "",
     ) : Action
 
-    /** Controla la música o el video que esté sonando, en cualquier app (como los botones de los audífonos). */
+    /**
+     * Controla la música o el video. Sin [packageName], como los botones de los audífonos: lo recibe la app que
+     * esté sonando o la última que sonó. Con [packageName], le habla directo a esa app de música, aunque esté
+     * cerrada (vacío = como antes).
+     */
     @Serializable
     @SerialName("media_control")
     data class MediaControl(
         val command: MediaCommand = MediaCommand.PLAY_PAUSE,
+        val packageName: String = "",
     ) : Action
 
     /**
