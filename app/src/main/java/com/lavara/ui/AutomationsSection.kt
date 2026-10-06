@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.lavara.actions.Action
 import com.lavara.actions.flatten
 import com.lavara.actions.needsDndAccess
+import com.lavara.actions.needsNotificationAccess
 import com.lavara.actions.opensScreen
 import com.lavara.system.accessibility.TapService
 import com.lavara.automation.Automation
@@ -125,7 +126,9 @@ fun AutomationsSection(
                     container.actionExecutor.smsSender.hasPermission(),
                 accessibility = automations.none { a -> a.enabled && a.actions.flatMap { it.flatten() }.any { it is Action.TapInApp } } ||
                     TapService.isEnabled(context),
-                notificationAccess = !TriggerMatcher.needsNotificationAccess(automations) || NotificationWatchService.isEnabled(context),
+                notificationAccess = (!TriggerMatcher.needsNotificationAccess(automations) &&
+                    automations.none { a -> a.enabled && a.actions.any { it.needsNotificationAccess() } }) ||
+                    NotificationWatchService.isEnabled(context),
                 location = automations.none { it.enabled && it.trigger is Trigger.Location } ||
                     (container.locationAccess.hasBackground() && container.locationAccess.isLocationOn()),
                 locationOn = container.locationAccess.isLocationOn(),

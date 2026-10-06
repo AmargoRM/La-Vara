@@ -17,6 +17,7 @@ data class Variables(val values: Map<String, String>) {
         is Action.SendSms -> action.copy(text = expand(action.text))
         is Action.CopyToClipboard -> action.copy(text = expand(action.text))
         is Action.ShareText -> action.copy(text = expand(action.text))
+        is Action.ReplyToNotification -> action.copy(text = expand(action.text))
         else -> action
     }
 

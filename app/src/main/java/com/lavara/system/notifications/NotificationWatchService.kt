@@ -14,6 +14,7 @@ import com.lavara.triggers.Trigger
 import com.lavara.triggers.TriggerEvent
 import com.lavara.triggers.TriggerMatcher
 import kotlinx.coroutines.launch
+import java.lang.ref.WeakReference
 
 /**
  * Disparador "Al llegar una notificación". Android le pasa a La Vara cada notificación nueva solo si el
@@ -42,10 +43,20 @@ class NotificationWatchService : NotificationListenerService() {
     }
 
     override fun onListenerConnected() {
+        instance = WeakReference(this)
         (applicationContext as LaVaraApp).container.logger.info("Notificaciones", "Acceso a notificaciones activo: La Vara escucha las notificaciones de otras apps")
     }
 
+    override fun onListenerDisconnected() {
+        instance = null
+    }
+
     companion object {
+        private var instance: WeakReference<NotificationWatchService>? = null
+
+        /** El servicio conectado, para leer las notificaciones visibles; null sin "Acceso a notificaciones". */
+        fun current(): NotificationWatchService? = instance?.get()
+
         fun isEnabled(context: Context): Boolean =
             context.packageName in NotificationManagerCompat.getEnabledListenerPackages(context)
 

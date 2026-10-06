@@ -386,13 +386,33 @@ Lista vacía = no se cumple.
 
 - `text` (obligatorio, acepta variables). Abre el menú Compartir de Android para elegir a qué app mandarlo. Como abre una pantalla, con el teléfono bloqueado espera el desbloqueo.
 
+### `reply_notification`: responder desde una notificación
+
+```json
+{ "type": "reply_notification", "packageName": "com.whatsapp", "text": "Voy manejando", "from": "Esteban" }
+```
+
+- `packageName` (obligatorio): app de la notificación.
+- `text` (obligatorio): la respuesta. Acepta `%battery`, `%time` y `%date`.
+- `from` (por defecto `""`): parte del título de la notificación (el contacto o el grupo). Vacío = la más nueva de esa app.
+- Usa el botón "Responder" de la notificación más nueva que coincida, sin abrir la app. Funciona con el teléfono bloqueado. Necesita "Acceso a notificaciones".
+
+### `tap_notification_button`: tocar un botón de una notificación
+
+```json
+{ "type": "tap_notification_button", "packageName": "com.whatsapp", "button": "Marcar como leído", "from": "" }
+```
+
+- `packageName` y `button` obligatorios; `from` como en `reply_notification`. El botón se busca por su texto, como en `tap_in_app`.
+
 ### `media_control`: controlar la música
 
 ```json
-{ "type": "media_control", "command": "play_pause" }
+{ "type": "media_control", "command": "play", "packageName": "com.spotify.music" }
 ```
 
-- `command` (por defecto `"play_pause"`): `"play_pause"`, `"play"`, `"pause"`, `"next"` o `"previous"`. Funciona con la app que esté sonando, como los botones de los audífonos.
+- `command` (por defecto `"play_pause"`): `"play_pause"`, `"play"`, `"pause"`, `"next"` o `"previous"`.
+- `packageName` (por defecto `""`): vacío = como los botones de los audífonos (la app que esté sonando o la última que sonó). Con una app = La Vara le habla directo a esa app, aunque esté cerrada: primero por su servicio de música (`MediaBrowserService`), si no, con la tecla de música enviada solo a ella. Con `"play"` comprueba durante 3 s que algo suene; si no, la acción falla.
 
 ### `if`: si… / si no…
 

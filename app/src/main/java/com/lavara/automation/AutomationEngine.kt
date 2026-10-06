@@ -354,7 +354,9 @@ class AutomationEngine(
             is Action.Vibrate -> "Vibrar ${action.millis} ms"
             is Action.CopyToClipboard -> "Copiar texto al portapapeles"
             is Action.ShareText -> "Compartir texto"
-            is Action.MediaControl -> "Música: ${action.command.label}"
+            is Action.ReplyToNotification -> "Responder notificación de ${action.packageName}"
+            is Action.TapNotificationButton -> "Tocar \"${action.button}\" en notificación de ${action.packageName}"
+            is Action.MediaControl -> "Música: ${action.command.label}" + (if (action.packageName.isBlank()) "" else " en ${action.packageName}")
             is Action.IfElse -> "Si (${action.conditions.size} condiciones): ${action.then.size} acciones; si no: ${action.otherwise.size}"
             is Action.ShowNotification -> "Mostrar notificación \"${action.title}\""
             is Action.OpenApp -> "Abrir app ${action.packageName}"

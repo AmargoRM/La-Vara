@@ -68,6 +68,13 @@
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
         </intent>
+        <!-- Apps de música, para la acción "Música" con una app elegida (despertarla aunque esté cerrada). -->
+        <intent>
+            <action android:name="android.media.browse.MediaBrowserService" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MEDIA_BUTTON" />
+        </intent>
     </queries>
 
     <!-- Disparador por ubicación: entrar o salir de una zona marcada en el mapa. La ubicación precisa se
