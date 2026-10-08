@@ -37,6 +37,12 @@ class ReleaseParserTest {
     }
 
     @Test
+    fun apkFueraDeLaApiDeGithubDevuelveNull() {
+        val ajeno = """{"name":"La-Vara.apk","url":"https://otro-servidor.com/La-Vara.apk","size":1}"""
+        assertNull(ReleaseParser.parse(release("La Vara 0.1.40", "", ajeno)))
+    }
+
+    @Test
     fun sinNumeroDeVersionDevuelveNull() {
         assertNull(ReleaseParser.parse(release("Sin número", "nada", apkAsset)))
     }

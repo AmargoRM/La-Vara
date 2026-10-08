@@ -24,6 +24,7 @@ data class ReleaseInfo(
  */
 object ReleaseParser {
     const val APK_NAME = "La-Vara.apk"
+    private const val API_PREFIX = "https://api.github.com/"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -49,7 +50,8 @@ object ReleaseParser {
             ?.mapNotNull { runCatching { it.jsonObject }.getOrNull() }
             ?.firstOrNull { it.string("name") == APK_NAME }
             ?: return null
-        val url = asset.string("url") ?: return null
+        // El token viaja a esta dirección: solo se acepta la API de GitHub, nunca otro servidor.
+        val url = asset.string("url")?.takeIf { it.startsWith(API_PREFIX) } ?: return null
         val size = asset["size"]?.jsonPrimitive?.longOrNull ?: 0L
 
         return ReleaseInfo(versionCode, versionName, url, size)
