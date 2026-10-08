@@ -31,6 +31,9 @@ class DeviceWatcher(
 ) {
     private val mutex = Mutex()
 
+    /** Último porcentaje visto en memoria: Android repite el aviso de batería muchas veces sin cambio. */
+    @Volatile private var lastLevel: Int? = null
+
     /** Revisa las automatizaciones y enciende o apaga la vigilancia. [reason] queda en el registro. */
     suspend fun sync(reason: String) {
         val needed = TriggerMatcher.needsDeviceWatch(automations.all())
@@ -51,6 +54,7 @@ class DeviceWatcher(
         } else if (!needed && DeviceWatchService.isRunning) {
             context.stopService(intent)
             settings.set(KEY_LAST_LEVEL, "")
+            lastLevel = null
             logger.info(SOURCE, "Vigilancia de batería, cargador y Wi-Fi apagada: ninguna automatización activa la usa ($reason)")
         }
     }
@@ -60,6 +64,9 @@ class DeviceWatcher(
      * el porcentaje cambia unas cien veces por día y llenaría los registros.
      */
     suspend fun onBatteryLevel(level: Int): Unit = mutex.withLock {
+        // El aviso llega cada vez que cambia la temperatura o el voltaje; sin cambio de porcentaje no se lee la base.
+        if (lastLevel == level) return@withLock
+        lastLevel = level
         val previous = settings.get(KEY_LAST_LEVEL)?.toIntOrNull()
         if (previous == level) return@withLock
         settings.set(KEY_LAST_LEVEL, level.toString())
