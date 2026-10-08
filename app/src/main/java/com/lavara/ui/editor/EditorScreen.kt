@@ -113,7 +113,7 @@ private val STEPS = listOf("¿CUÁNDO?", "¿SI?", "¿HACER QUÉ?")
  * Guarda con el mismo JSON de siempre y vuelve a programar las alarmas.
  */
 @Composable
-fun EditorScreen(container: AppContainer, automationId: String?, onClose: () -> Unit) {
+fun EditorScreen(container: AppContainer, automationId: String?, onClose: () -> Unit, startWith: AutomationDraft? = null) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val all by remember { container.automationRepository.observeAll() }.collectAsState(initial = emptyList())
@@ -126,9 +126,11 @@ fun EditorScreen(container: AppContainer, automationId: String?, onClose: () -> 
 
     LaunchedEffect(automationId) {
         val loaded = automationId?.let { container.automationRepository.find(it) }?.let { AutomationDraft.from(it) }
+            ?: startWith
             ?: AutomationDraft.new()
         draft = loaded
-        initial = loaded
+        // Lo grabado con "Grabar toques" todavía no está guardado: al cerrar sin guardar, se pregunta.
+        initial = if (automationId == null && startWith != null) null else loaded
     }
 
     fun close() {

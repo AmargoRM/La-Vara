@@ -46,6 +46,7 @@ import com.lavara.BuildConfig
 import com.lavara.LaVaraApp
 import com.lavara.R
 import com.lavara.core.AppContainer
+import com.lavara.automation.AutomationDraft
 import com.lavara.core.AppInfo
 import com.lavara.ui.editor.EditorScreen
 import com.lavara.ui.history.HistoryScreen
@@ -99,9 +100,19 @@ fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: In
     var tab by rememberSaveable { mutableStateOf(Tab.INICIO) }
     // Editor abierto: null = cerrado; NEW = automatización nueva; si no, el id de la que se edita.
     var editing by rememberSaveable { mutableStateOf<String?>(null) }
+    // Lo que armó "Grabar toques", para abrirlo en el editor como automatización nueva.
+    var recorded by remember { mutableStateOf<AutomationDraft?>(null) }
 
     editing?.let { id ->
-        EditorScreen(container, automationId = id.takeUnless { it == NEW }, onClose = { editing = null })
+        EditorScreen(
+            container,
+            automationId = id.takeUnless { it == NEW || it == RECORDED },
+            startWith = recorded.takeIf { id == RECORDED },
+            onClose = {
+                editing = null
+                recorded = null
+            },
+        )
         return
     }
 
@@ -148,6 +159,10 @@ fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: In
                     Tab.INICIO -> StartTab(
                         container, resumeCount,
                         onEdit = { editing = it ?: NEW },
+                        onRecorded = {
+                            recorded = it
+                            editing = RECORDED
+                        },
                         onShowHistory = { tab = Tab.HISTORIAL },
                         onOpenMenu = { scope.launch { drawer.open() } },
                     )
@@ -159,6 +174,7 @@ fun HomeScreen(versionLabel: String, container: AppContainer, installRequest: In
 }
 
 private const val NEW = "__nueva__"
+private const val RECORDED = "__grabada__"
 
 /** Sube cada vez que La Vara vuelve al frente: las pantallas lo usan para volver a revisar permisos. */
 val LocalResumeCount = compositionLocalOf { 0 }
@@ -173,6 +189,7 @@ private fun StartTab(
     container: AppContainer,
     resumeCount: Int,
     onEdit: (String?) -> Unit,
+    onRecorded: (AutomationDraft) -> Unit,
     onShowHistory: () -> Unit,
     onOpenMenu: () -> Unit,
 ) {
@@ -193,6 +210,7 @@ private fun StartTab(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         NewVersionBanner(update, onOpen = onOpenMenu)
+        RecordTapsButton(onCreate = onRecorded)
         AutomationsSection(container = container, resumeCount = resumeCount, onEdit = onEdit, onShowHistory = onShowHistory)
         // Espacio para que el botón "Nueva" no tape lo último de la lista.
         Spacer(Modifier.height(80.dp))

@@ -99,6 +99,7 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
   - [x] Acción "Música" con app elegida: despierta esa app de música aunque esté cerrada y el teléfono bloqueado (pedido del usuario, 2026-10-04).
   - [x] Revisión de rendimiento (el usuario notó el teléfono trabado, 2026-10-08): "Ver los botones" se apaga sola a los 3 minutos y lee la pantalla como mucho una vez por segundo; notificaciones y batería se comparan en memoria.
   - [x] "Ver los botones" muestra lo que se ve en la pantalla de la app (ej. "Iniciar viaje") y no nombres internos de programador (pedido del usuario, 2026-10-08).
+  - [x] "Mirame y repetí": grabar los toques en una app permitida y convertirlos en una automatización (pedido del usuario, 2026-10-08).
 - [ ] **S16 Archivos:** crear, escribir, añadir, leer, copiar, mover, eliminar, existe, dentro de carpetas que el usuario elija (Storage Access Framework).
 
 ## ETAPA 3 — Avanzado
