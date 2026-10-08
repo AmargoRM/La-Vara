@@ -10,6 +10,7 @@ import android.os.Vibrator
 import android.os.VibratorManager
 import android.os.Build
 import android.view.KeyEvent
+import com.lavara.LaVaraApp
 import com.lavara.actions.Action
 import com.lavara.actions.ActionResult
 import com.lavara.actions.MediaCommand
@@ -38,19 +39,37 @@ class ExtraActions(private val context: Context) {
         ActionResult.Failure("Android no dejó copiar al portapapeles: ${e.message}")
     }
 
-    /** Manda la tecla de música, como los botones de los audífonos: la recibe la app que esté sonando. */
-    fun media(action: Action.MediaControl): ActionResult {
-        val audio = context.getSystemService(AudioManager::class.java) ?: return ActionResult.Failure("No se encontró el audio del teléfono.")
-        val code = when (action.command) {
-            MediaCommand.PLAY_PAUSE -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
-            MediaCommand.PLAY -> KeyEvent.KEYCODE_MEDIA_PLAY
-            MediaCommand.PAUSE -> KeyEvent.KEYCODE_MEDIA_PAUSE
-            MediaCommand.NEXT -> KeyEvent.KEYCODE_MEDIA_NEXT
-            MediaCommand.PREVIOUS -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+    /**
+     * Sin app elegida: manda la tecla de música, como los botones de los audífonos (la recibe la app que esté
+     * sonando o la última que sonó). Con app elegida: le habla directo a esa app, aunque esté cerrada.
+     */
+    suspend fun media(action: Action.MediaControl): ActionResult {
+        if (action.packageName.isBlank()) return mediaKey(action.command)
+        val music = MusicApps(context)
+        val name = InstalledApps(context).label(action.packageName) ?: return ActionResult.Failure("La app de música ${action.packageName} no está instalada.")
+        val how = music.control(action.packageName, action.command)
+        if (how != null) {
+            log("$name respondió $how.")
+            return ActionResult.Success
         }
+        // Último intento: la tecla de siempre, por si igual era la última app que sonó.
+        mediaKey(action.command)
+        return ActionResult.Failure(
+            "$name no empezó a sonar. Puede que no acepte órdenes de otras apps estando cerrada; " +
+                "probá abrirla una vez y volver a intentar, o elegí \"Cualquiera\" en la acción.",
+        )
+    }
+
+    private fun mediaKey(command: MediaCommand): ActionResult {
+        val audio = context.getSystemService(AudioManager::class.java) ?: return ActionResult.Failure("No se encontró el audio del teléfono.")
+        val code = MusicApps.keyCode(command)
         val now = SystemClock.uptimeMillis()
         audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0))
         audio.dispatchMediaKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0))
         return ActionResult.Success
+    }
+
+    private fun log(message: String) {
+        (context.applicationContext as LaVaraApp).container.logger.info("Música", message)
     }
 }

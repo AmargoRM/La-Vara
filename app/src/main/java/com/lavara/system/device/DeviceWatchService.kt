@@ -1,7 +1,5 @@
 package com.lavara.system.device
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -95,12 +93,7 @@ class DeviceWatchService : Service() {
     }
 
     private fun startInForeground() {
-        val manager = getSystemService(NotificationManager::class.java)
-        val channel = NotificationChannel(CHANNEL_ID, "La Vara está activa", NotificationManager.IMPORTANCE_MIN).apply {
-            description = "Aviso fijo mientras La Vara escucha la batería, el cargador y el Wi-Fi. Se puede ocultar sin apagar la vigilancia."
-            setShowBadge(false)
-        }
-        manager.createNotificationChannel(channel)
+        FixedNotices.ensureChannels(this)
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notificacion)
@@ -118,7 +111,7 @@ class DeviceWatchService : Service() {
     }
 
     companion object {
-        private const val CHANNEL_ID = "vigilancia"
+        private const val CHANNEL_ID = FixedNotices.WATCH_CHANNEL
 
         // Actualizaciones usan 1001 y 1002; automatizaciones, de 2000 en adelante.
         private const val NOTIFICATION_ID = 1500

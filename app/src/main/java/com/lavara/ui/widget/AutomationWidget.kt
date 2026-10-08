@@ -107,6 +107,8 @@ class AutomationWidget : AppWidgetProvider() {
             is Action.Vibrate -> "📳"
             is Action.CopyToClipboard -> "📋"
             is Action.ShareText -> "📤"
+            is Action.ReplyToNotification -> "💬"
+            is Action.TapNotificationButton -> "🔘"
             is Action.MediaControl -> "🎵"
             is Action.IfElse -> "🔀"
             else -> "⚡"
