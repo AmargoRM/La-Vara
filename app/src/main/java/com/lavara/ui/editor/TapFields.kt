@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import com.lavara.actions.Action
+import com.lavara.actions.touchText
 import com.lavara.automation.AutomationDraft
 import com.lavara.system.accessibility.AllowedApps
 import com.lavara.system.accessibility.TapService
@@ -173,4 +174,40 @@ internal fun AllowAppDialog(appLabel: String, onAllow: () -> Unit, onDismiss: ()
         confirmButton = { TextButton(onClick = onAllow) { Text("Permitir") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
     )
+}
+
+/** Campos de un toque grabado por posición: dónde toca (no se edita, se graba de nuevo) y cuánto espera antes. */
+@Composable
+internal fun TouchFields(action: Action.TouchScreen, onChange: (Action.TouchScreen) -> Unit) {
+    val context = LocalContext.current
+    val label = remember(action.packageName) { InstalledApps(context).label(action.packageName) }
+    Text(
+        "${touchText(action)} en ${label ?: action.packageName}. Se grabó con \"Grabar toques\"; para cambiar el lugar, grabalo de nuevo.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    var seconds by remember(action.packageName, action.x, action.y) { mutableStateOf((action.pauseMillis / 1000.0).toString().removeSuffix(".0")) }
+    OutlinedTextField(
+        value = seconds,
+        onValueChange = { new ->
+            seconds = new.filter { it.isDigit() || it == '.' || it == ',' }.take(4)
+            seconds.replace(',', '.').toDoubleOrNull()?.let { onChange(action.copy(pauseMillis = (it * 1000).toLong())) }
+        },
+        label = { Text("Esperar antes de tocar (segundos)") },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+        supportingText = { Text("Lo que tarda la pantalla en cambiar. Entre 0 y ${AutomationDraft.MAX_DELAY_SECONDS}.") },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        "Toca el mismo lugar de la pantalla: si la app cambia de lugar las cosas (otro orden, un anuncio, el teléfono girado), " +
+            "puede tocar otra cosa. Funciona con el teléfono desbloqueado y la app a la vista.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    if (action.packageName.isNotBlank() && action.packageName !in AllowedApps(context).get()) {
+        Text(
+            "Esta app no está en tu lista de apps permitidas: la acción va a fallar.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
 }

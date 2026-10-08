@@ -47,6 +47,7 @@ object AutoName {
         is Action.Navigate -> "Navegar" + action.destination.let { if (it.isBlank()) "" else " a $it" }
         is Action.SendSms -> "SMS" + action.contactName.let { if (it.isBlank()) "" else " a $it" }
         is Action.TapInApp -> "Tocar ${action.button}"
+        is Action.TouchScreen -> if (action.isSwipe) "Deslizar" else "Tocar la pantalla"
         is Action.Vibrate -> "Vibrar"
         is Action.CopyToClipboard -> "Copiar texto"
         is Action.ShareText -> "Compartir texto"

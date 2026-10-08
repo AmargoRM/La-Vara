@@ -362,6 +362,22 @@ Lista vacía = no se cumple.
 - Necesita el permiso de Accesibilidad encendido y el teléfono desbloqueado con la app a la vista. Va después de la acción que abre la app (por ejemplo, `whatsapp_message` y luego `tap_in_app`).
 - En los registros solo aparece el botón que se pidió, nunca lo que hay en la pantalla.
 
+### `touch_screen`: tocar o deslizar en un punto de la pantalla de otra app
+
+```json
+{ "type": "touch_screen", "packageName": "com.spotify.music", "x": 0.5, "y": 0.8, "toX": 0.5, "toY": 0.3,
+  "durationMillis": 300, "pauseMillis": 1500, "waitSeconds": 10 }
+```
+
+- Lo arma "Grabar toques" para lo que no tiene nombre visible (juegos, apps que no muestran sus botones a Android).
+- `packageName` (por defecto `""`): la app. Como en `tap_in_app`, **tiene que estar en la lista de apps permitidas**.
+- `x`, `y` (por defecto 0.5): dónde empieza el dedo, de 0 a 1 (parte del ancho desde la izquierda y del alto desde arriba).
+- `toX`, `toY` (por defecto ninguno): si están los dos, desliza el dedo hasta ahí; si no, es un toque.
+- `durationMillis` (por defecto 50, de 1 a 10000): cuánto dura el toque o el deslizamiento (500 o más = mantener tocado).
+- `pauseMillis` (por defecto 1000, de 0 a 10000): cuánto espera antes de tocar, para que la pantalla cambie.
+- `waitSeconds` (por defecto 10, de 1 a 10): cuánto espera a que la app esté a la vista.
+- Toca siempre el mismo lugar: si la app cambia de lugar las cosas o el teléfono está girado distinto, puede tocar otra cosa.
+
 ### `vibrate`: vibrar
 
 ```json
