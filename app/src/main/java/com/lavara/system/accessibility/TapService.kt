@@ -11,6 +11,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
@@ -37,6 +39,12 @@ import java.lang.ref.WeakReference
  */
 class TapService : AccessibilityService() {
 
+    private val handler = Handler(Looper.getMainLooper())
+    private val captureTimeout = Runnable { stopCapture() }
+
+    /** Última vez que se recorrió la pantalla mientras el usuario elige un botón. */
+    private var lastScan = 0L
+
     override fun onServiceConnected() {
         instance = WeakReference(this)
         val apps = AllowedApps(this).get()
@@ -52,8 +60,18 @@ class TapService : AccessibilityService() {
             return
         }
         if (event?.packageName?.toString() != target) return
-        val root = rootInActiveWindow ?: return
-        if (root.packageName?.toString() != target) return
+        // Cada letra que se escribe cambia la pantalla: recorrerla en cada cambio traba la app (y el teclado).
+        // Se recorre como mucho una vez por segundo, y una última vez cuando la pantalla se queda quieta.
+        handler.removeCallbacks(scan)
+        val wait = SCAN_EVERY_MILLIS - (SystemClock.uptimeMillis() - lastScan)
+        if (wait <= 0) scan.run() else handler.postDelayed(scan, wait)
+    }
+
+    private val scan = Runnable {
+        lastScan = SystemClock.uptimeMillis()
+        val target = capturePackage ?: return@Runnable
+        val root = rootInActiveWindow ?: return@Runnable
+        if (root.packageName?.toString() != target) return@Runnable
         val labels = ButtonList.from(candidates(root))
         if (labels.isNotEmpty()) _captured.value = ScreenButtons(target, labels)
     }
@@ -67,6 +85,10 @@ class TapService : AccessibilityService() {
         _captured.value = null
         capturePackage = packageName
         captureUntil = SystemClock.uptimeMillis() + CAPTURE_MILLIS
+        lastScan = 0L
+        // Se apaga sola a los 3 minutos aunque no llegue ningún aviso más (antes esperaba al siguiente aviso).
+        handler.removeCallbacks(captureTimeout)
+        handler.postDelayed(captureTimeout, CAPTURE_MILLIS)
         setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED or AccessibilityEvent.TYPE_VIEW_SCROLLED)
         showCaptureNotification(appLabel)
         return true
@@ -74,6 +96,8 @@ class TapService : AccessibilityService() {
 
     /** Deja de mirar la pantalla y vuelve a los avisos mínimos. */
     fun stopCapture() {
+        handler.removeCallbacks(captureTimeout)
+        handler.removeCallbacks(scan)
         capturePackage = null
         setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
         NotificationManagerCompat.from(this).cancel(CAPTURE_NOTIFICATION)
@@ -146,6 +170,8 @@ class TapService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     override fun onUnbind(intent: Intent?): Boolean {
+        handler.removeCallbacks(captureTimeout)
+        handler.removeCallbacks(scan)
         instance = null
         capturePackage = null
         log("Accesibilidad apagada.")
@@ -230,6 +256,7 @@ class TapService : AccessibilityService() {
         private const val POLL_MILLIS = 300L
         private const val MAX_NODES = 3000
         private const val CAPTURE_MILLIS = 3 * 60_000L
+        private const val SCAN_EVERY_MILLIS = 1_000L
         private const val CAPTURE_CHANNEL = "elegir_boton"
         private const val CAPTURE_NOTIFICATION = 3001
 

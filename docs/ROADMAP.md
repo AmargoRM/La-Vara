@@ -97,6 +97,7 @@ Cerrar la app, reiniciar el teléfono, esperar. La notificación llega a la hora
   - [x] "Ver los botones": elegir el botón de una lista leída de la pantalla de la app, en vez de adivinar su nombre (pedido del usuario, 2026-10-03).
   - [x] "Responder una notificación" y "Tocar un botón de una notificación", con el teléfono bloqueado (OK del usuario, 2026-10-04).
   - [x] Acción "Música" con app elegida: despierta esa app de música aunque esté cerrada y el teléfono bloqueado (pedido del usuario, 2026-10-04).
+  - [x] Revisión de rendimiento (el usuario notó el teléfono trabado, 2026-10-08): "Ver los botones" se apaga sola a los 3 minutos y lee la pantalla como mucho una vez por segundo; notificaciones y batería se comparan en memoria.
 - [ ] **S16 Archivos:** crear, escribir, añadir, leer, copiar, mover, eliminar, existe, dentro de carpetas que el usuario elija (Storage Access Framework).
 
 ## ETAPA 3 — Avanzado
