@@ -374,6 +374,7 @@ class AutomationEngine(
             is Action.Navigate -> "Navegar con ${action.app.label}"
             is Action.SendSms -> "Enviar SMS a ${action.recipient}"
             is Action.TapInApp -> "Tocar \"${action.button}\" en ${action.packageName}"
+            is Action.TouchScreen -> (if (action.isSwipe) "Deslizar" else "Tocar un punto") + " en ${action.packageName}"
         }
     }
 }

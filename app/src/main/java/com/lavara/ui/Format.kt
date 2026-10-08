@@ -5,6 +5,7 @@ import android.text.format.DateFormat
 import com.lavara.actions.Action
 import com.lavara.actions.DndMode
 import com.lavara.actions.recipient
+import com.lavara.actions.touchText
 import com.lavara.actions.waitText
 import com.lavara.automation.Automation
 import com.lavara.conditions.Comparison
@@ -121,6 +122,7 @@ fun actionTitle(action: Action) = when (action) {
     is Action.Navigate -> "Navegar con ${action.app.label}"
     is Action.SendSms -> "SMS a ${action.recipient}"
     is Action.TapInApp -> "Tocar \"${action.button}\""
+    is Action.TouchScreen -> touchText(action)
     is Action.Vibrate -> "Vibrar"
     is Action.CopyToClipboard -> "Copiar al portapapeles"
     is Action.ShareText -> "Compartir texto"

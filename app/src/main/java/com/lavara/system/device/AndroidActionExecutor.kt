@@ -62,6 +62,7 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
         is Action.Navigate -> navigate(action)
         is Action.SendSms -> smsSender.send(action)
         is Action.TapInApp -> tapInApp(action)
+        is Action.TouchScreen -> touchScreen(action)
         is Action.ReplyToNotification -> NotificationActions(context).reply(action)
         is Action.TapNotificationButton -> NotificationActions(context).tap(action)
         is Action.Vibrate -> extra.vibrate(action)
@@ -188,6 +189,19 @@ class AndroidActionExecutor(private val context: Context) : ActionExecutor {
             "El permiso de Accesibilidad de La Vara está apagado. Encendelo en Ajustes → Accesibilidad → La Vara: tocar botones.",
         )
         val problem = service.tap(action.packageName, action.button, action.waitSeconds.coerceIn(1, 10) * 1000L)
+        return if (problem == null) ActionResult.Success else ActionResult.Failure("No se pudo tocar en $name: $problem")
+    }
+
+    /** Repite un toque grabado por posición en otra app, solo si está en la lista de permitidas. */
+    private suspend fun touchScreen(action: Action.TouchScreen): ActionResult {
+        val name = InstalledApps(context).label(action.packageName) ?: action.packageName
+        if (action.packageName !in AllowedApps(context).get()) {
+            return ActionResult.Failure("$name no está en la lista de apps donde La Vara puede tocar botones. Agregala desde el editor.")
+        }
+        val service = TapService.current() ?: return ActionResult.Failure(
+            "El permiso de Accesibilidad de La Vara está apagado. Encendelo en Ajustes → Accesibilidad → La Vara: tocar botones.",
+        )
+        val problem = service.touch(action)
         return if (problem == null) ActionResult.Success else ActionResult.Failure("No se pudo tocar en $name: $problem")
     }
 

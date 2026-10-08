@@ -64,6 +64,16 @@ data class AutomationDraft(
                 action.waitSeconds !in 1..MAX_DELAY_SECONDS.toInt() ->
                     add("$label espera entre 1 y $MAX_DELAY_SECONDS segundos a que abra la app.")
             }
+            is Action.TouchScreen -> when {
+                action.packageName.isBlank() -> add("$label necesita elegir en qué app tocar.")
+                listOfNotNull(action.x, action.y, action.toX, action.toY).any { it !in 0.0..1.0 } ->
+                    add("$label tiene un punto fuera de la pantalla. Grabalo de nuevo.")
+                action.pauseMillis !in 0..MAX_DELAY_SECONDS * 1000 ->
+                    add("$label espera entre 0 y $MAX_DELAY_SECONDS segundos antes de tocar.")
+                action.durationMillis !in 1..MAX_DELAY_SECONDS * 1000 -> add("$label dura demasiado. Grabalo de nuevo.")
+                action.waitSeconds !in 1..MAX_DELAY_SECONDS.toInt() ->
+                    add("$label espera entre 1 y $MAX_DELAY_SECONDS segundos a que abra la app.")
+            }
             is Action.CopyToClipboard -> if (action.text.isBlank()) add("$label necesita el texto a copiar.")
             is Action.ShareText -> if (action.text.isBlank()) add("$label necesita el texto a compartir.")
             is Action.ReplyToNotification -> when {

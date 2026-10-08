@@ -85,6 +85,7 @@ class AutomationWidget : AppWidgetProvider() {
             when (action) {
                 is Action.OpenApp -> action.packageName
                 is Action.TapInApp -> action.packageName.ifBlank { null }
+                is Action.TouchScreen -> action.packageName.ifBlank { null }
                 is Action.WhatsAppMessage -> "com.whatsapp"
                 is Action.Navigate -> if (action.app == NavigationApp.WAZE) "com.waze" else "com.google.android.apps.maps"
                 else -> null

@@ -4,6 +4,7 @@
     android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault|flagReportViewIds"
+    android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
     android:description="@string/tap_service_description"
     android:isAccessibilityTool="false"

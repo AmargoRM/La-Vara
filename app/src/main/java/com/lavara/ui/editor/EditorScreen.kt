@@ -1002,6 +1002,7 @@ private fun ActionFields(
             )
         }
         is Action.TapInApp -> TapFields(action, onPickApp = { onPickTapApp() }) { replace(it) }
+        is Action.TouchScreen -> TouchFields(action) { replace(it) }
         is Action.ReplyToNotification -> ReplyNotificationFields(action) { replace(it) }
         is Action.TapNotificationButton -> TapNotificationFields(action) { replace(it) }
         is Action.RunAutomation -> {

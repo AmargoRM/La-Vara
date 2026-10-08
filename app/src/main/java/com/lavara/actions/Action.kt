@@ -208,6 +208,28 @@ sealed interface Action {
         val waitSeconds: Int = 5,
     ) : Action
 
+    /**
+     * Toca un punto de la pantalla de [packageName] (o desliza el dedo hasta [toX], [toY]), grabado con
+     * "Grabar toques". Sirve para apps que no dejan ver sus botones (juegos, algunas apps de música).
+     * Las posiciones van de 0 a 1: la parte del ancho (desde la izquierda) y del alto (desde arriba) de la pantalla.
+     * Antes de tocar espera [pauseMillis] (lo que tardó el usuario al grabar) y hasta [waitSeconds] a que la app
+     * esté a la vista. Usa Accesibilidad y solo funciona en apps de la lista permitida.
+     */
+    @Serializable
+    @SerialName("touch_screen")
+    data class TouchScreen(
+        val packageName: String = "",
+        val x: Double = 0.5,
+        val y: Double = 0.5,
+        val toX: Double? = null,
+        val toY: Double? = null,
+        val durationMillis: Long = 50,
+        val pauseMillis: Long = 1000,
+        val waitSeconds: Int = 10,
+    ) : Action {
+        val isSwipe: Boolean get() = toX != null && toY != null
+    }
+
     /** Hace vibrar el teléfono [millis] milisegundos. No pide permisos especiales. */
     @Serializable
     @SerialName("vibrate")
@@ -314,7 +336,10 @@ fun Action.opensScreen(): Boolean = when (this) {
 }
 
 /** Si la acción necesita el teléfono desbloqueado: abre algo en pantalla o toca botones. */
-fun Action.needsUnlock(): Boolean = opensScreen() || this is Action.TapInApp || nested.any { it.needsUnlock() }
+fun Action.needsUnlock(): Boolean = opensScreen() || usesAccessibility() || nested.any { it.needsUnlock() }
+
+/** Si la acción toca otra app con el servicio de Accesibilidad de La Vara. */
+fun Action.usesAccessibility(): Boolean = this is Action.TapInApp || this is Action.TouchScreen
 
 /** Si la acción usa las notificaciones de otras apps: necesita "Acceso a notificaciones". */
 fun Action.needsNotificationAccess(): Boolean =

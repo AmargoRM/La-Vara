@@ -46,6 +46,7 @@ import com.lavara.actions.flatten
 import com.lavara.actions.needsDndAccess
 import com.lavara.actions.needsNotificationAccess
 import com.lavara.actions.opensScreen
+import com.lavara.actions.usesAccessibility
 import com.lavara.system.accessibility.TapService
 import com.lavara.automation.Automation
 import com.lavara.automation.AutomationDraft
@@ -124,7 +125,7 @@ fun AutomationsSection(
                     container.actionExecutor.systemControls.canWriteSettings(),
                 sms = automations.none { a -> a.enabled && a.actions.flatMap { it.flatten() }.any { it is Action.SendSms } } ||
                     container.actionExecutor.smsSender.hasPermission(),
-                accessibility = automations.none { a -> a.enabled && a.actions.flatMap { it.flatten() }.any { it is Action.TapInApp } } ||
+                accessibility = automations.none { a -> a.enabled && a.actions.flatMap { it.flatten() }.any { it.usesAccessibility() } } ||
                     TapService.isEnabled(context),
                 notificationAccess = (!TriggerMatcher.needsNotificationAccess(automations) &&
                     automations.none { a -> a.enabled && a.actions.any { it.needsNotificationAccess() } }) ||

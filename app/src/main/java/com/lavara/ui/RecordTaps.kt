@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.lavara.LaVaraApp
+import com.lavara.actions.text
 import com.lavara.automation.AutomationDraft
 import com.lavara.system.accessibility.AllowedApps
 import com.lavara.system.accessibility.TapService
@@ -64,8 +65,7 @@ fun RecordTapsButton(onCreate: (AutomationDraft) -> Unit) {
         problem = when {
             service == null -> "La Accesibilidad de La Vara todavía no arrancó. Apagala y encendela en Ajustes."
             launch == null -> "No se pudo abrir ${app.label}."
-            !service.startRecording(app.packageName, app.label) -> "${app.label} no está en la lista de apps permitidas."
-            else -> {
+            else -> service.startRecording(app.packageName, app.label) ?: run {
                 startedAt = resumeCount
                 context.startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 null
@@ -134,34 +134,37 @@ fun RecordTapsButton(onCreate: (AutomationDraft) -> Unit) {
         title = { Text("Toques en ${done.appLabel}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                if (done.labels.isEmpty()) {
-                    Text(
-                        "No se grabó ningún botón. Algunas apps no le avisan a Android cuando tocás algo (por ejemplo, mapas o juegos); " +
-                            "en esas no se puede grabar. Podés armarla a mano con la acción \"Tocar un botón\" y \"Ver los botones\".",
-                    )
+                if (done.steps.isEmpty()) {
+                    Text("No se grabó ningún toque en ${done.appLabel}.")
                 } else {
-                    Text("La Vara va a abrir ${done.appLabel} y tocar, en orden:")
+                    Text("La Vara va a abrir ${done.appLabel} y hacer, en orden:")
                     LazyColumn(modifier = Modifier.heightIn(max = 320.dp)) {
-                        itemsIndexed(done.labels) { index, label ->
+                        itemsIndexed(done.steps) { index, step ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("${index + 1}. $label", modifier = Modifier.weight(1f))
+                                Text("${index + 1}. ${step.text()}", modifier = Modifier.weight(1f))
                                 TextButton(onClick = { TapService.updateRecording(done.remove(index)) }) { Text("Quitar") }
                             }
                         }
                     }
                 }
+                if (done.steps.any { it.label == null }) {
+                    Text(
+                        "Los toques \"en un punto\" y \"deslizar\" repiten la misma posición de la pantalla: si la app cambia de lugar " +
+                            "las cosas, pueden tocar otra cosa.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 if (done.skipped > 0) {
                     Text(
-                        "${done.skipped} ${if (done.skipped == 1) "toque no se pudo grabar" else "toques no se pudieron grabar"}: " +
-                            "el botón no tiene nombre visible (por ejemplo, un ícono sin texto) o era un campo para escribir. " +
-                            "Lo que escribís nunca se graba.",
+                        "${done.skipped} ${if (done.skipped == 1) "toque no se grabó" else "toques no se grabaron"}: " +
+                            "fueron en el teclado, con dos dedos o fuera de ${done.appLabel}. Lo que escribís nunca se graba.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
         },
         confirmButton = {
-            if (done.labels.isNotEmpty()) {
+            if (done.steps.isNotEmpty()) {
                 TextButton(onClick = {
                     TapService.discardRecording()
                     onCreate(done.toDraft())

@@ -10,7 +10,12 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.accessibilityservice.GestureDescription
+import android.graphics.Path
 import android.graphics.Rect
+import android.os.Build
+import android.util.DisplayMetrics
+import android.view.WindowManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -23,13 +28,16 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.lavara.LaVaraApp
 import com.lavara.R
+import com.lavara.actions.Action
 import com.lavara.actions.ButtonList
 import com.lavara.actions.ButtonMatch
 import com.lavara.actions.TapRecording
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.lang.ref.WeakReference
+import kotlin.coroutines.resume
 
 /**
  * Servicio de Accesibilidad de La Vara. Hace tres cosas, siempre en apps de la lista [AllowedApps]:
@@ -37,14 +45,15 @@ import java.lang.ref.WeakReference
  * - cuando el usuario lo pide desde el editor ("Ver los botones"), lista los nombres de los botones que se
  *   ven en esa app, solo en memoria, por 3 minutos como máximo, para elegir uno;
  * - cuando el usuario toca "Grabar toques" en Inicio, anota el nombre visible de cada botón que él toca en esa
- *   app, solo en memoria y por 5 minutos como máximo, para armar una automatización que los repita.
+ *   app (su nombre visible o, si no tiene, su posición), solo en memoria y por 5 minutos como máximo, para armar
+ *   una automatización que los repita (ver [TapRecorder]).
  * No guarda lo que hay en pantalla y nunca escribe en los registros el texto de otras apps.
  */
 class TapService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
     private val captureTimeout = Runnable { stopCapture() }
-    private val recordTimeout = Runnable { stopRecording() }
+    private val recorder by lazy { TapRecorder(this, _recording) }
 
     /** Última vez que se recorrió la pantalla mientras el usuario elige un botón. */
     private var lastScan = 0L
@@ -58,10 +67,6 @@ class TapService : AccessibilityService() {
 
     /** Solo se usa mientras el usuario elige un botón o graba toques; el resto del tiempo La Vara no mira la pantalla. */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (recordPackage != null) {
-            if (event != null) onRecordEvent(event)
-            return
-        }
         val target = capturePackage ?: return
         if (SystemClock.uptimeMillis() > captureUntil) {
             stopCapture()
@@ -108,84 +113,64 @@ class TapService : AccessibilityService() {
         handler.removeCallbacks(captureTimeout)
         handler.removeCallbacks(scan)
         capturePackage = null
-        if (recordPackage == null) setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
+        setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
         NotificationManagerCompat.from(this).cancel(CAPTURE_NOTIFICATION)
     }
 
     /**
-     * Empieza a grabar los toques del usuario en [packageName] (que tiene que estar en la lista permitida).
-     * Pide a Android solo el aviso "se tocó algo" mientras dura, y se apaga sola a los 5 minutos.
+     * Empieza a grabar los toques del usuario en [packageName] (que tiene que estar en la lista permitida): pone
+     * una capa invisible encima, anota cada toque y se lo pasa a la app. Se apaga sola a los 5 minutos.
+     * Devuelve el motivo si no pudo empezar, o null.
      */
-    fun startRecording(packageName: String, appLabel: String): Boolean {
-        if (packageName !in AllowedApps(this).get()) return false
+    fun startRecording(packageName: String, appLabel: String): String? {
+        if (packageName !in AllowedApps(this).get()) return "$appLabel no está en la lista de apps permitidas."
         stopCapture()
-        val recording = TapRecording(packageName, appLabel)
-        _recording.value = recording
-        recordPackage = packageName
-        recordUntil = SystemClock.uptimeMillis() + RECORD_MILLIS
-        handler.removeCallbacks(recordTimeout)
-        handler.postDelayed(recordTimeout, RECORD_MILLIS)
-        setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or AccessibilityEvent.TYPE_VIEW_CLICKED)
-        showRecordNotification(recording)
-        log("Grabación de toques empezada en $appLabel.")
-        return true
+        return recorder.start(packageName, appLabel)
     }
 
-    /** Termina la grabación (si había una) y vuelve a los avisos mínimos. Lo grabado queda para crear la automatización. */
-    fun stopRecording() {
-        handler.removeCallbacks(recordTimeout)
-        if (recordPackage == null) return
-        recordPackage = null
-        if (capturePackage == null) setEventTypes(AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED)
-        NotificationManagerCompat.from(this).cancel(RECORD_NOTIFICATION)
-        val recording = _recording.value ?: return
-        _recording.value = recording.copy(active = false)
-        log("Grabación de toques terminada en ${recording.appLabel}: ${recording.labels.size} toques grabados, ${recording.skipped} sin nombre.")
+    /** Termina la grabación (si había una) y saca la capa. Lo grabado queda para crear la automatización. */
+    fun stopRecording() = recorder.stop()
+
+    /** Durante la grabación, La Vara necesita saber qué ventana está debajo del dedo (la app o el teclado). */
+    internal fun setRetrieveWindows(on: Boolean) {
+        val info = serviceInfo ?: return
+        info.flags = if (on) info.flags or AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        else info.flags and AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS.inv()
+        serviceInfo = info
     }
 
-    /** Un toque del usuario mientras se graba. Solo cuenta si fue en la app que se está grabando. */
-    private fun onRecordEvent(event: AccessibilityEvent) {
-        val target = recordPackage ?: return
-        if (SystemClock.uptimeMillis() > recordUntil) {
-            stopRecording()
-            return
+    /** El tamaño de la pantalla en píxeles (ancho, alto), girada como está ahora. */
+    internal fun screenSize(): Pair<Int, Int> {
+        val manager = getSystemService(WindowManager::class.java)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            manager.maximumWindowMetrics.bounds.let { it.width() to it.height() }
+        } else {
+            val metrics = DisplayMetrics()
+            @Suppress("DEPRECATION")
+            manager.defaultDisplay.getRealMetrics(metrics)
+            metrics.widthPixels to metrics.heightPixels
         }
-        if (event.eventType != AccessibilityEvent.TYPE_VIEW_CLICKED || event.packageName?.toString() != target) return
-        if (target !in AllowedApps(this).get()) {
-            stopRecording()
-            return
-        }
-        val before = _recording.value ?: return
-        val after = before.add(clickedLabel(event, target), SystemClock.uptimeMillis())
-        if (after == before) return
-        _recording.value = after
-        if (after.labels.size != before.labels.size || after.skipped != before.skipped) showRecordNotification(after)
     }
 
     /**
-     * El nombre visible de lo que el usuario tocó, el mismo que "Ver los botones" mostraría y con el que
-     * [ButtonMatch] después lo encuentra. null si no tiene nombre útil o si era un campo para escribir
-     * (lo que se escribe nunca se graba).
+     * El nombre visible de lo tocable que está debajo del punto ([x], [y]), el mismo que mostraría
+     * "Ver los botones". null si no tiene nombre o si ese nombre aparece más de una vez en la pantalla
+     * (al repetir podría tocar el otro): entonces se repite por posición.
      */
-    private fun clickedLabel(event: AccessibilityEvent, target: String): String? {
-        if (event.isPassword) return null
-        val node = event.source
-        if (node != null) {
-            if (node.isPassword || node.isEditable) return null
-            ButtonList.label(ButtonList.Candidate(node.text, node.contentDescription, innerText(node), 0, 0))?.let { return it }
-            // Muchas apps dibujan el texto encima del botón sin ponerlo adentro.
-            val root = rootInActiveWindow
-            if (root != null && root.packageName?.toString() == target) textOver(root, node)?.let { return it }
-        }
-        return ButtonList.label(ButtonList.Candidate(event.text.singleOrNull(), event.contentDescription, null, 0, 0))
+    internal fun labelAt(root: AccessibilityNodeInfo, x: Int, y: Int): String? {
+        val parts = visibleParts(root)
+        val boxes = parts.clickables.map { it.second }
+        val index = ButtonList.smallestCovering(boxes, x, y) ?: return null
+        val node = parts.clickables[index].first
+        if (node.isPassword) return null
+        val label = ButtonList.label(ButtonList.Candidate(node.text, node.contentDescription, innerText(node), 0, 0))
+            ?: textOver(parts, boxes[index])
+            ?: return null
+        return label.takeIf { countNamed(root, it) == 1 }
     }
 
-    /** El primer texto visible (de arriba hacia abajo) que queda encima de [button] y que tocaría ese botón. */
-    private fun textOver(root: AccessibilityNodeInfo, button: AccessibilityNodeInfo): String? {
-        val bounds = Rect()
-        button.getBoundsInScreen(bounds)
-        val target = ButtonList.Box(bounds.left, bounds.top, bounds.right, bounds.bottom)
-        val parts = visibleParts(root)
+    /** El primer texto visible (de arriba hacia abajo) que queda encima de [target] y que tocaría ese botón. */
+    private fun textOver(parts: Parts, target: ButtonList.Box): String? {
         val boxes = parts.clickables.map { it.second }
         return parts.texts
             .sortedWith(compareBy({ it.second.top }, { it.second.left }))
@@ -199,37 +184,59 @@ class TapService : AccessibilityService() {
             }
     }
 
-    // El permiso de notificaciones se revisa con areNotificationsEnabled; sin él, no se muestra y listo.
-    @SuppressLint("MissingPermission")
-    private fun showRecordNotification(recording: TapRecording) {
-        val manager = NotificationManagerCompat.from(this)
-        if (!manager.areNotificationsEnabled()) return
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(RECORD_CHANNEL, "Grabar toques", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Aparece solo mientras grabás toques en otra app."
-            },
-        )
-        val back = packageManager.getLaunchIntentForPackage(packageName)
-            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED) ?: return
-        val count = recording.labels.size
-        val text = "Tocá los botones como siempre. Cuando termines, tocá acá para volver a La Vara."
-        val notification = NotificationCompat.Builder(this, RECORD_CHANNEL)
-            .setSmallIcon(R.drawable.ic_notificacion)
-            .setContentTitle("Grabando en ${recording.appLabel}: $count ${if (count == 1) "toque" else "toques"}")
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-            .setContentIntent(PendingIntent.getActivity(this, RECORD_NOTIFICATION, back, PendingIntent.FLAG_IMMUTABLE))
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setAutoCancel(true)
-            .setTimeoutAfter(RECORD_MILLIS)
-            .build()
-        try {
-            manager.notify(RECORD_NOTIFICATION, notification)
-        } catch (_: SecurityException) {
-            // Sin permiso de notificaciones: se vuelve a La Vara con el botón de apps recientes.
+    /** Cuántas cosas visibles se llaman exactamente [label] (lo que [find] encontraría primero). */
+    private fun countNamed(root: AccessibilityNodeInfo, label: String): Int {
+        var count = 0
+        val queue = ArrayDeque<AccessibilityNodeInfo>().apply { add(root) }
+        var visited = 0
+        while (queue.isNotEmpty() && visited < MAX_NODES) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isVisibleToUser && ButtonMatch.score(label, node.text, node.contentDescription, null) == 3) count++
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
         }
+        return count
     }
+
+    /**
+     * Repite un toque grabado por posición: espera lo que esperó el usuario, comprueba que [Action.TouchScreen.packageName]
+     * esté a la vista y toca (o desliza) en ese punto. Devuelve null si lo hizo, o el motivo si no.
+     */
+    suspend fun touch(action: Action.TouchScreen): String? {
+        delay(action.pauseMillis.coerceIn(0, 10_000))
+        val deadline = SystemClock.uptimeMillis() + action.waitSeconds.coerceIn(1, 10) * 1000L
+        while (true) {
+            if (action.packageName !in AllowedApps(this).get()) return "esa app no está en la lista de apps permitidas."
+            if (rootInActiveWindow?.packageName?.toString() == action.packageName) break
+            if (SystemClock.uptimeMillis() >= deadline) return notVisibleReason()
+            delay(POLL_MILLIS)
+        }
+        val (width, height) = screenSize()
+        fun px(fraction: Double, size: Int) = (fraction.coerceIn(0.0, 1.0) * (size - 1)).toFloat()
+        val path = Path().apply {
+            moveTo(px(action.x, width), px(action.y, height))
+            val toX = action.toX
+            val toY = action.toY
+            if (toX != null && toY != null) lineTo(px(toX, width), px(toY, height))
+        }
+        val stroke = GestureDescription.StrokeDescription(path, 0, action.durationMillis.coerceIn(1, 10_000))
+        return if (perform(GestureDescription.Builder().addStroke(stroke).build())) null else "Android no dejó tocar la pantalla."
+    }
+
+    /** Hace el gesto y espera a que Android diga si lo terminó. */
+    private suspend fun perform(gesture: GestureDescription): Boolean = suspendCancellableCoroutine { cont ->
+        val callback = object : GestureResultCallback() {
+            override fun onCompleted(gestureDescription: GestureDescription?) {
+                if (cont.isActive) cont.resume(true)
+            }
+
+            override fun onCancelled(gestureDescription: GestureDescription?) {
+                if (cont.isActive) cont.resume(false)
+            }
+        }
+        if (!dispatchGesture(gesture, callback, handler) && cont.isActive) cont.resume(false)
+    }
+
 
     private fun setEventTypes(types: Int) {
         val info = serviceInfo ?: return
@@ -258,12 +265,12 @@ class TapService : AccessibilityService() {
     }
 
     /** Lo visible de la pantalla: las cosas tocables con su rectángulo, y los textos que no son tocables. */
-    private class Parts(
+    internal class Parts(
         val clickables: List<Pair<AccessibilityNodeInfo, ButtonList.Box>>,
         val texts: List<Pair<AccessibilityNodeInfo, Rect>>,
     )
 
-    private fun visibleParts(root: AccessibilityNodeInfo): Parts {
+    internal fun visibleParts(root: AccessibilityNodeInfo): Parts {
         val clickables = mutableListOf<Pair<AccessibilityNodeInfo, ButtonList.Box>>()
         val texts = mutableListOf<Pair<AccessibilityNodeInfo, Rect>>()
         val queue = ArrayDeque<AccessibilityNodeInfo>().apply { add(root) }
@@ -286,7 +293,7 @@ class TapService : AccessibilityService() {
     }
 
     /** El primer texto o descripción de adentro de un botón que no tiene nombre propio (hasta 5 niveles). */
-    private fun innerText(node: AccessibilityNodeInfo, depth: Int = 0): CharSequence? {
+    internal fun innerText(node: AccessibilityNodeInfo, depth: Int = 0): CharSequence? {
         if (depth >= 5) return null
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
@@ -331,11 +338,9 @@ class TapService : AccessibilityService() {
     override fun onUnbind(intent: Intent?): Boolean {
         handler.removeCallbacks(captureTimeout)
         handler.removeCallbacks(scan)
-        handler.removeCallbacks(recordTimeout)
         instance = null
         capturePackage = null
-        recordPackage = null
-        _recording.value = _recording.value?.copy(active = false)
+        recorder.stop()
         log("Accesibilidad apagada.")
         return super.onUnbind(intent)
     }
@@ -375,6 +380,10 @@ class TapService : AccessibilityService() {
             delay(POLL_MILLIS)
         }
         if (appSeen) return "no encontré el botón \"$button\" en la pantalla."
+        return notVisibleReason()
+    }
+
+    private fun notVisibleReason(): String {
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
             !getSystemService(PowerManager::class.java).isInteractive
         return if (locked) "la app no apareció en pantalla: el teléfono estaba bloqueado o con la pantalla apagada."
@@ -437,7 +446,7 @@ class TapService : AccessibilityService() {
         return found
     }
 
-    private fun log(message: String) {
+    internal fun log(message: String) {
         (applicationContext as LaVaraApp).container.logger.info("Accesibilidad", message)
     }
 
@@ -448,16 +457,11 @@ class TapService : AccessibilityService() {
         private const val SCAN_EVERY_MILLIS = 1_000L
         private const val CAPTURE_CHANNEL = "elegir_boton"
         private const val CAPTURE_NOTIFICATION = 3001
-        private const val RECORD_MILLIS = 5 * 60_000L
-        private const val RECORD_CHANNEL = "grabar_toques"
-        private const val RECORD_NOTIFICATION = 3002
 
         private var instance: WeakReference<TapService>? = null
 
         @Volatile private var capturePackage: String? = null
         @Volatile private var captureUntil = 0L
-        @Volatile private var recordPackage: String? = null
-        @Volatile private var recordUntil = 0L
 
         private val _recording = MutableStateFlow<TapRecording?>(null)
 
@@ -466,10 +470,7 @@ class TapService : AccessibilityService() {
 
         /** Termina la grabación (el usuario volvió a La Vara); lo grabado queda para crear la automatización. */
         fun finishRecording() {
-            current()?.stopRecording() ?: run {
-                recordPackage = null
-                _recording.value = _recording.value?.copy(active = false)
-            }
+            current()?.stopRecording() ?: run { _recording.value = _recording.value?.copy(active = false) }
         }
 
         /** Cambia lo grabado (por ejemplo, el usuario sacó un toque de más). */
