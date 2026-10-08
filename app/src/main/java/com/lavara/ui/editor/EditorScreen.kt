@@ -866,12 +866,21 @@ private fun ActionFields(
             OutlinedTextField(action.title, { replace(action.copy(title = it)) }, label = { Text("Título") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(action.text, { replace(action.copy(text = it)) }, label = { Text("Texto") }, modifier = Modifier.fillMaxWidth())
             Text("Podés usar %battery (batería), %time (hora) y %date (fecha).", style = MaterialTheme.typography.bodySmall)
-            if (!(context.applicationContext as LaVaraApp).container.actionExecutor.notificationPrefs.showOwn) {
+            val prefs = (context.applicationContext as LaVaraApp).container.actionExecutor.notificationPrefs
+            var showOwn by remember { mutableStateOf(prefs.showOwn) }
+            if (!showOwn) {
+                // No es el permiso de Android: es el interruptor propio de La Vara, apagado por defecto.
                 Text(
-                    "Ojo: no se va a ver, porque está apagado \"Mostrar mis notificaciones\" (menú ☰ → Notificaciones).",
+                    "Ojo: esta notificación no se va a ver. El permiso de Android está bien; lo que está apagado es el " +
+                        "interruptor de La Vara \"Mostrar mis notificaciones\" (menú ☰ → Notificaciones).",
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                OutlinedButton(onClick = {
+                    prefs.showOwn = true
+                    showOwn = true
+                    (context.applicationContext as LaVaraApp).container.logger.info("Notificaciones", "Mostrar mis notificaciones: encendido (desde el editor)")
+                }) { Text("Encender \"Mostrar mis notificaciones\"") }
             }
         }
         is Action.Delay -> WaitFields(action) { replace(it) }

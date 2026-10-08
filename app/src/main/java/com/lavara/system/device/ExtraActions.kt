@@ -47,16 +47,20 @@ class ExtraActions(private val context: Context) {
         if (action.packageName.isBlank()) return mediaKey(action.command)
         val music = MusicApps(context)
         val name = InstalledApps(context).label(action.packageName) ?: return ActionResult.Failure("La app de música ${action.packageName} no está instalada.")
-        val how = music.control(action.packageName, action.command)
-        if (how != null) {
-            log("$name respondió $how.")
+        val outcome = music.control(action.packageName, action.command)
+        if (outcome.how != null) {
+            log("$name respondió ${outcome.how}.")
             return ActionResult.Success
         }
         // Último intento: la tecla de siempre, por si igual era la última app que sonó.
         mediaKey(action.command)
+        if (action.command != MediaCommand.PLAY || music.soundsWithin(MusicApps.VERIFY_MILLIS)) {
+            log("$name: ${outcome.steps.joinToString("; ")}; sonó con la tecla de música general.")
+            return ActionResult.Success
+        }
         return ActionResult.Failure(
-            "$name no empezó a sonar. Puede que no acepte órdenes de otras apps estando cerrada; " +
-                "probá abrirla una vez y volver a intentar, o elegí \"Cualquiera\" en la acción.",
+            "$name no empezó a sonar (${outcome.steps.joinToString("; ")}; la tecla de música general tampoco). " +
+                "$name no acepta que otra app la despierte estando cerrada.",
         )
     }
 
