@@ -41,34 +41,50 @@ class MusicApps(private val context: Context) {
             .sortedBy { it.label.lowercase() }
     }
 
-    /**
-     * Le da [command] a [packageName]. Devuelve cómo lo logró (para los registros), o null si la app no
-     * respondió por ningún camino.
-     */
-    suspend fun control(packageName: String, command: MediaCommand): String? {
+    /** Qué pasó al pedirle música a una app: cómo lo logró ([how], null si no) y cada intento, para los registros. */
+    data class Outcome(val how: String?, val steps: List<String>)
+
+    private enum class Reply { NO_SERVICE, REFUSED, SOUNDS, SILENT }
+
+    /** Le da [command] a [packageName] probando, en orden, su servicio de música y la tecla dirigida a ella. */
+    suspend fun control(packageName: String, command: MediaCommand): Outcome {
         // Solo "reproducir" se comprueba: con "reproducir o pausar" un segundo intento podría volver a pausar.
         val wantsSound = command == MediaCommand.PLAY
-        if (viaService(packageName, command)) {
-            if (!wantsSound || soundsWithin(VERIFY_MILLIS)) return "por su servicio de música"
+        val steps = mutableListOf<String>()
+        // Primero como lo pide Android para "reanudar"; si la app lo rechaza, como cualquier otra app.
+        for (recent in listOf(true, false)) {
+            val kind = if (recent) "pedido de reanudar" else "pedido normal"
+            when (viaService(packageName, command, recent, wantsSound)) {
+                Reply.NO_SERVICE -> { steps += "no tiene servicio de música"; break }
+                Reply.REFUSED -> steps += "su servicio de música rechazó el $kind"
+                Reply.SOUNDS -> return Outcome("por su servicio de música ($kind)", steps)
+                Reply.SILENT -> { steps += "su servicio de música aceptó el $kind, pero no sonó"; break }
+            }
         }
         if (viaButton(packageName, command)) {
-            if (!wantsSound || soundsWithin(VERIFY_MILLIS)) return "con la tecla de música enviada a esa app"
+            if (!wantsSound || soundsWithin(VERIFY_MILLIS)) return Outcome("con la tecla de música enviada a esa app", steps)
+            steps += "la tecla de música enviada a esa app no la despertó"
+        } else {
+            steps += "no recibe la tecla de música directa"
         }
-        return null
+        return Outcome(null, steps)
     }
 
-    /** Se conecta al servicio de música de la app, le manda la orden y espera a ver si suena antes de soltarla. */
-    private suspend fun viaService(packageName: String, command: MediaCommand): Boolean {
+    /**
+     * Se conecta al servicio de música de la app y le manda la orden. Con [verify], espera conectado a que algo
+     * suene (si se suelta enseguida, algunas apps se cierran antes de sonar).
+     */
+    private suspend fun viaService(packageName: String, command: MediaCommand, recent: Boolean, verify: Boolean): Reply {
         val service = context.packageManager
             .queryIntentServices(Intent(MediaBrowserService.SERVICE_INTERFACE).setPackage(packageName), 0)
-            .firstOrNull()?.serviceInfo ?: return false
+            .firstOrNull()?.serviceInfo ?: return Reply.NO_SERVICE
         // MediaBrowser tiene que usarse desde el hilo principal.
         return withContext(Dispatchers.Main) {
             var browser: MediaBrowser? = null
             val connected = withTimeoutOrNull(CONNECT_MILLIS) {
                 suspendCancellableCoroutine { cont ->
                     // "Lo reciente": la misma pista que usa Android para reanudar la última música de una app.
-                    val hints = Bundle().apply { putBoolean(MediaBrowserService.BrowserRoot.EXTRA_RECENT, true) }
+                    val hints = if (recent) Bundle().apply { putBoolean(MediaBrowserService.BrowserRoot.EXTRA_RECENT, true) } else null
                     val callback = object : MediaBrowser.ConnectionCallback() {
                         override fun onConnected() { if (cont.isActive) cont.resume(true) }
                         override fun onConnectionFailed() { if (cont.isActive) cont.resume(false) }
@@ -83,7 +99,7 @@ class MusicApps(private val context: Context) {
             val current = browser
             if (!connected || current == null) {
                 current?.disconnect()
-                return@withContext false
+                return@withContext Reply.REFUSED
             }
             try {
                 val controller = MediaController(context, current.sessionToken)
@@ -97,11 +113,14 @@ class MusicApps(private val context: Context) {
                     MediaCommand.NEXT -> controls.skipToNext()
                     MediaCommand.PREVIOUS -> controls.skipToPrevious()
                 }
-                // Mantener la conexión un rato: si se suelta enseguida, algunas apps se cierran antes de sonar.
-                delay(HOLD_MILLIS)
-                true
+                if (verify) {
+                    if (soundsWithin(VERIFY_MILLIS)) Reply.SOUNDS else Reply.SILENT
+                } else {
+                    delay(HOLD_MILLIS)
+                    Reply.SOUNDS
+                }
             } catch (_: RuntimeException) {
-                false
+                Reply.REFUSED
             } finally {
                 current.disconnect()
             }
@@ -130,7 +149,7 @@ class MusicApps(private val context: Context) {
     }
 
     /** Si empieza a sonar algo en [millis] milisegundos (mira cada medio segundo, solo ese rato). */
-    private suspend fun soundsWithin(millis: Long): Boolean {
+    suspend fun soundsWithin(millis: Long): Boolean {
         val audio = context.getSystemService(AudioManager::class.java) ?: return false
         val deadline = SystemClock.uptimeMillis() + millis
         while (SystemClock.uptimeMillis() < deadline) {
@@ -151,7 +170,7 @@ class MusicApps(private val context: Context) {
     companion object {
         private const val CONNECT_MILLIS = 5_000L
         private const val HOLD_MILLIS = 1_500L
-        private const val VERIFY_MILLIS = 3_000L
+        const val VERIFY_MILLIS = 3_000L
 
         fun keyCode(command: MediaCommand): Int = when (command) {
             MediaCommand.PLAY_PAUSE -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
