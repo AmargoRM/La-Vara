@@ -109,30 +109,48 @@ class TapService : AccessibilityService() {
         serviceInfo = info
     }
 
-    /** Todo lo tocable y visible de la pantalla, con su nombre y su posición. */
+    /**
+     * Todo lo que se puede elegir en la pantalla, con su nombre y su posición:
+     * - cada cosa tocable y visible, con su texto, su descripción o el texto que tiene adentro;
+     * - cada texto visible que queda encima de algo tocable (aunque no esté "adentro" del botón), porque
+     *   muchas apps dibujan el texto aparte y así el usuario ve en la lista lo mismo que en la pantalla.
+     */
     private fun candidates(root: AccessibilityNodeInfo): List<ButtonList.Candidate> {
         val found = mutableListOf<ButtonList.Candidate>()
+        val boxes = mutableListOf<ButtonList.Box>()
+        val texts = mutableListOf<Pair<AccessibilityNodeInfo, Rect>>()
         val queue = ArrayDeque<AccessibilityNodeInfo>().apply { add(root) }
         var visited = 0
-        val bounds = Rect()
         while (queue.isNotEmpty() && visited < MAX_NODES) {
             val node = queue.removeFirst()
             visited++
-            if (node.isVisibleToUser && node.isClickable) {
+            if (node.isVisibleToUser) {
+                val bounds = Rect()
                 node.getBoundsInScreen(bounds)
-                found += ButtonList.Candidate(node.text, node.contentDescription, innerText(node), node.viewIdResourceName, bounds.top, bounds.left)
+                if (node.isClickable) {
+                    boxes += ButtonList.Box(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                    found += ButtonList.Candidate(node.text, node.contentDescription, innerText(node), bounds.top, bounds.left)
+                } else if (!node.text.isNullOrBlank() || !node.contentDescription.isNullOrBlank()) {
+                    texts += node to bounds
+                }
             }
             for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        for ((node, bounds) in texts) {
+            if (ButtonList.smallestCovering(boxes, bounds.centerX(), bounds.centerY()) != null) {
+                found += ButtonList.Candidate(node.text, node.contentDescription, null, bounds.top, bounds.left)
+            }
         }
         return found
     }
 
-    /** El primer texto o descripción de adentro de un botón que no tiene nombre propio (hasta 3 niveles). */
+    /** El primer texto o descripción de adentro de un botón que no tiene nombre propio (hasta 5 niveles). */
     private fun innerText(node: AccessibilityNodeInfo, depth: Int = 0): CharSequence? {
-        if (depth >= 3) return null
+        if (depth >= 5) return null
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            val own = child.text?.takeIf { it.isNotBlank() } ?: child.contentDescription?.takeIf { it.isNotBlank() }
+            val own = listOf(child.text, child.contentDescription)
+                .firstOrNull { !it.isNullOrBlank() && !ButtonList.looksLikeCode(it.toString().trim()) }
             if (own != null) return own
             innerText(child, depth + 1)?.let { return it }
         }
@@ -207,7 +225,7 @@ class TapService : AccessibilityService() {
             if (root != null && root.packageName?.toString() == packageName) {
                 appSeen = true
                 val node = find(root, button)
-                if (node != null) return if (click(node)) null else "Android no dejó tocar \"$button\"."
+                if (node != null) return if (click(root, node)) null else "Android no dejó tocar \"$button\"."
             }
             if (SystemClock.uptimeMillis() >= deadline) break
             delay(POLL_MILLIS)
@@ -241,11 +259,38 @@ class TapService : AccessibilityService() {
         return best
     }
 
-    /** Toca el botón o, si el texto está dentro de algo tocable, ese contenedor. */
-    private fun click(node: AccessibilityNodeInfo): Boolean {
+    /**
+     * Toca el botón o, si el texto está dentro de algo tocable, ese contenedor. Si el texto está dibujado
+     * encima del botón sin estar adentro, toca lo tocable más chico que hay debajo del texto.
+     */
+    private fun click(root: AccessibilityNodeInfo, node: AccessibilityNodeInfo): Boolean {
         var target: AccessibilityNodeInfo? = node
         while (target != null && !target.isClickable) target = target.parent
-        return target?.performAction(AccessibilityNodeInfo.ACTION_CLICK) ?: false
+        if (target != null) return target.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+        val bounds = Rect()
+        node.getBoundsInScreen(bounds)
+        val under = clickablesUnder(root, bounds.centerX(), bounds.centerY())
+        val index = ButtonList.smallestCovering(under.map { it.second }, bounds.centerX(), bounds.centerY()) ?: return false
+        return under[index].first.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+    }
+
+    /** Las cosas tocables y visibles que contienen el punto, con su rectángulo. */
+    private fun clickablesUnder(root: AccessibilityNodeInfo, x: Int, y: Int): List<Pair<AccessibilityNodeInfo, ButtonList.Box>> {
+        val found = mutableListOf<Pair<AccessibilityNodeInfo, ButtonList.Box>>()
+        val queue = ArrayDeque<AccessibilityNodeInfo>().apply { add(root) }
+        var visited = 0
+        val bounds = Rect()
+        while (queue.isNotEmpty() && visited < MAX_NODES) {
+            val node = queue.removeFirst()
+            visited++
+            if (node.isVisibleToUser && node.isClickable) {
+                node.getBoundsInScreen(bounds)
+                val box = ButtonList.Box(bounds.left, bounds.top, bounds.right, bounds.bottom)
+                if ((x to y) in box) found += node to box
+            }
+            for (i in 0 until node.childCount) node.getChild(i)?.let { queue.add(it) }
+        }
+        return found
     }
 
     private fun log(message: String) {
