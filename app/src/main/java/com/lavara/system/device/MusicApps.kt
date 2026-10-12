@@ -67,6 +67,20 @@ class MusicApps(private val context: Context) {
         } else {
             steps += "no recibe la tecla de música directa"
         }
+        // Una app cerrada hace mucho (por ejemplo, toda la noche) tarda en arrancar: su servicio rechaza los
+        // primeros pedidos mientras se prepara, aunque los intentos de arriba ya la pusieron en marcha.
+        // Se le da un rato y se le vuelve a pedir, ya despierta.
+        if (steps.any { it.startsWith("su servicio de música rechazó") }) {
+            delay(WARM_UP_MILLIS)
+            for (recent in listOf(false, true)) {
+                val kind = if (recent) "pedido de reanudar" else "pedido normal"
+                when (viaService(packageName, command, recent, wantsSound)) {
+                    Reply.SOUNDS -> return Outcome("por su servicio de música, al segundo intento ($kind)", steps)
+                    Reply.SILENT -> { steps += "al segundo intento aceptó el $kind, pero no sonó"; break }
+                    else -> steps += "al segundo intento rechazó el $kind"
+                }
+            }
+        }
         return Outcome(null, steps)
     }
 
@@ -171,6 +185,7 @@ class MusicApps(private val context: Context) {
         private const val CONNECT_MILLIS = 5_000L
         private const val HOLD_MILLIS = 1_500L
         const val VERIFY_MILLIS = 3_000L
+        private const val WARM_UP_MILLIS = 5_000L
 
         fun keyCode(command: MediaCommand): Int = when (command) {
             MediaCommand.PLAY_PAUSE -> KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
