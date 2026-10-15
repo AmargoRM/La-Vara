@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Carpetas que La Vara puede compartir con el instalador de Android. -->
+<!-- Carpetas que La Vara puede compartir: con el instalador de Android y, los registros exportados, con otras apps. -->
 <paths>
     <cache-path name="actualizacion" path="actualizacion/" />
+    <cache-path name="registros" path="registros/" />
 </paths>
