@@ -34,6 +34,14 @@ object BluetoothDevices {
         }
     }
 
+    /** Si el aparato está vinculado a este teléfono. Sin permiso se responde que sí, para no perder avisos. */
+    @SuppressLint("MissingPermission")
+    fun isBonded(device: BluetoothDevice): Boolean = try {
+        device.bondState == BluetoothDevice.BOND_BONDED
+    } catch (e: SecurityException) {
+        true
+    }
+
     @SuppressLint("MissingPermission")
     fun nameOf(device: BluetoothDevice): String? = try {
         (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) device.alias else null) ?: device.name
