@@ -1,7 +1,14 @@
 package com.lavara.ui.history
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
+import androidx.core.content.FileProvider
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -81,14 +88,22 @@ fun HistoryScreen(container: AppContainer) {
             Text("Historial", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             OutlinedButton(onClick = {
                 scope.launch {
-                    val text = LogExporter.build(
-                        header = "La Vara ${BuildConfig.VERSION_NAME} (compilación ${BuildConfig.VERSION_CODE}) · zona $zone",
-                        runs = container.runRepository.latest(500),
-                        logs = container.database.logDao().latest(2_000),
-                        zone = zone,
-                    )
-                    container.logger.info("Historial", "Se exportaron los logs")
-                    share(context, text)
+                    val runs = container.runRepository.latest(500)
+                    val logs = container.database.logDao().latest(2_000)
+                    val header = "La Vara ${BuildConfig.VERSION_NAME} (compilación ${BuildConfig.VERSION_CODE}) · zona $zone"
+                    val text = LogExporter.build(header = header, runs = runs, logs = logs, zone = zone)
+                    val name = LogExporter.fileName(System.currentTimeMillis(), zone)
+                    val problem = try {
+                        val file = withContext(Dispatchers.IO) { writeExport(context, name, text) }
+                        share(context, file, LogExporter.shareSummary(header, runs.size, logs.size))
+                        container.logger.info("Historial", "Se exportaron los logs como archivo (${text.length} caracteres)")
+                        null
+                    } catch (e: Exception) {
+                        if (e is CancellationException) throw e
+                        container.logger.error("Historial", "No se pudieron exportar los logs: ${e.javaClass.simpleName} ${e.message.orEmpty()}")
+                        "No se pudieron exportar los logs (${e.javaClass.simpleName}). Probá de nuevo."
+                    }
+                    problem?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
                 }
             }) { Text("Exportar logs") }
         }
@@ -220,11 +235,25 @@ private fun LogRow(log: LogEntity, zone: ZoneId) {
 
 private val WarnOrange = Color(0xFF9A5B00)
 
-/** Abre el menú Compartir de Android con el texto (WhatsApp, correo, etc.). */
-private fun share(context: Context, text: String) {
+/** Guarda el texto en un archivo dentro de la caché de La Vara (solo queda la última exportación). */
+private fun writeExport(context: Context, name: String, text: String): File {
+    val dir = File(context.cacheDir, "registros").apply { mkdirs() }
+    dir.listFiles()?.forEach { it.delete() }
+    return File(dir, name).apply { writeText(text) }
+}
+
+/**
+ * Abre el menú Compartir de Android con el archivo de registros (correo, WhatsApp, Drive, etc.).
+ * Se comparte como archivo: el texto completo dentro del pedido superaba el límite de 1 MB de Android.
+ */
+private fun share(context: Context, file: File, summary: String) {
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.archivos", file)
     val send = Intent(Intent.ACTION_SEND)
         .setType("text/plain")
         .putExtra(Intent.EXTRA_SUBJECT, "Logs de La Vara")
-        .putExtra(Intent.EXTRA_TEXT, text)
+        .putExtra(Intent.EXTRA_TEXT, summary)
+        .putExtra(Intent.EXTRA_STREAM, uri)
+        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    send.clipData = ClipData.newRawUri(file.name, uri)
     context.startActivity(Intent.createChooser(send, "Exportar logs"))
 }

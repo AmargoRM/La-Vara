@@ -40,4 +40,22 @@ class LogExporterTest {
         assertTrue(text.endsWith("(recortado)"))
         assertTrue(text.length < 1_100)
     }
+
+    @Test
+    fun alCompartirElMensajeEsCortoYElRegistroVaEnArchivo() {
+        // El error: 200.000 letras dentro del pedido de Compartir superaban el límite de 1 MB de Android.
+        val logs = (1..2_000).map { LogEntity(timestamp = it * 1_000L, level = "INFO", source = "Motor", message = "x".repeat(200)) }
+        val full = LogExporter.build("La Vara 0.1.40", emptyList(), logs, zone)
+        assertTrue(full.length > 100_000)
+
+        val summary = LogExporter.shareSummary("La Vara 0.1.40", 0, logs.size)
+        assertTrue(summary, summary.length < 500)
+        assertTrue(summary, summary.contains("2000 registros"))
+    }
+
+    @Test
+    fun elArchivoLlevaFechaYHora() {
+        val name = LogExporter.fileName(1_760_000_000_000L, zone)
+        assertTrue(name, name.matches(Regex("""la-vara-logs-\d{4}-\d{2}-\d{2}-\d{4}\.txt""")))
+    }
 }
