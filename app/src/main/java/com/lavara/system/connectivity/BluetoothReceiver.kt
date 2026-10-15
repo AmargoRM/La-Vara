@@ -30,13 +30,28 @@ class BluetoothReceiver : BroadcastReceiver() {
             try {
                 // Relojes y otros aparatos se conectan y desconectan seguido: sin automatizaciones de
                 // Bluetooth activas no se registra nada, para no llenar el Historial.
-                if (container.automationRepository.all().none { it.enabled && it.trigger is Trigger.Bluetooth }) return@launch
+                val triggers = container.automationRepository.all()
+                    .filter { it.enabled }.mapNotNull { it.trigger as? Trigger.Bluetooth }
+                if (!shouldHandle(BluetoothDevices.isBonded(device), device.address, triggers)) return@launch
                 val name = BluetoothDevices.nameOf(device) ?: ""
                 val now = container.clock.now().toInstant().toEpochMilli()
                 container.automationRunner.handle(TriggerEvent.BluetoothChanged(device.address, name, connected, now))
             } finally {
                 pending.finish()
             }
+        }
+    }
+
+    companion object {
+        /**
+         * Celulares, televisores y relojes ajenos que pasan cerca abren conexiones cortas con el teléfono
+         * (Compartir con Quick Share, la red de Encontrar mi dispositivo) y Android también las avisa. Solo
+         * cuentan los aparatos vinculados a este teléfono, o uno que una automatización nombre a propósito;
+         * los demás se ignoran sin escribir nada en el Historial.
+         */
+        fun shouldHandle(bonded: Boolean, address: String, activeTriggers: List<Trigger.Bluetooth>): Boolean {
+            if (activeTriggers.isEmpty()) return false
+            return bonded || activeTriggers.any { it.deviceAddress.equals(address, ignoreCase = true) }
         }
     }
 
